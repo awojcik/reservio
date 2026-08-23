@@ -1,0 +1,248 @@
+"use client";
+
+import { List, Map as MapIcon } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { Header } from "@/components/layout/Header";
+import { PropertyCard } from "@/components/property/PropertyCard";
+import { useFavorites } from "@/components/property/useFavorites";
+import { AiSearchField } from "./AiSearchField";
+import { EmptyState } from "./EmptyState";
+import { FilterBar } from "./FilterBar";
+import { ResultsHeader } from "./ResultsHeader";
+import { SearchBar } from "./SearchBar";
+import { getProperties } from "@/data/properties";
+import { cn } from "@/lib/cn";
+import {
+  buildSearchParams,
+  countActiveFilters,
+  parseSearchQuery,
+  searchProperties,
+} from "@/lib/search";
+import type { MapBounds, SearchQuery } from "@/lib/types";
+
+/** MapLibre touches `window` on import — keep it out of the server bundle. */
+const PropertyMap = dynamic(() => import("@/components/map/PropertyMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="absolute inset-0 animate-pulse bg-[#EDE7DA]" aria-hidden="true" />
+  ),
+});
+
+export function SearchExperience() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const query = useMemo(() => parseSearchQuery(searchParams), [searchParams]);
+  const results = useMemo(() => searchProperties(getProperties(), query), [query]);
+  const activeFilters = countActiveFilters(query);
+
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<"list" | "map">("list");
+
+  // A selection only survives while its property is still in the result set.
+  const selectedId =
+    pickedId && results.some(({ property }) => property.id === pickedId)
+      ? pickedId
+      : null;
+  const { favorites, toggleFavorite } = useFavorites();
+
+  // The stay travels with the guest into the detail page.
+  const stayQuery = useMemo(
+    () =>
+      new URLSearchParams({
+        checkIn: query.checkIn,
+        checkOut: query.checkOut,
+        adults: String(query.adults),
+        children: String(query.children),
+      }).toString(),
+    [query.checkIn, query.checkOut, query.adults, query.children],
+  );
+
+  const cardRefs = useRef(new Map<string, HTMLDivElement>());
+  const scrollTargetRef = useRef<string | null>(null);
+  const resultsColumnRef = useRef<HTMLDivElement>(null);
+
+  const patch = useCallback(
+    (next: Partial<SearchQuery>) => {
+      const params = buildSearchParams({ ...query, ...next });
+      router.replace(`/search?${params.toString()}`, { scroll: false });
+    },
+    [query, router],
+  );
+
+  const resetFilters = useCallback(() => {
+    patch({
+      propertyTypes: [],
+      minBedrooms: 0,
+      pool: false,
+      parking: false,
+      nearBeach: false,
+      minRating: 0,
+      maxPrice: null,
+      amenities: [],
+      bounds: null,
+    });
+  }, [patch]);
+
+  /** Marker click: select the property and bring its card into view. */
+  const selectFromMap = useCallback((id: string) => {
+    scrollTargetRef.current = id;
+    setPickedId(id);
+    setMobileView("list");
+  }, []);
+
+  const handleSearchArea = useCallback(
+    (bounds: MapBounds) => patch({ bounds }),
+    [patch],
+  );
+
+  useEffect(() => {
+    const id = scrollTargetRef.current;
+    if (!id) return;
+    scrollTargetRef.current = null;
+
+    const card = cardRefs.current.get(id);
+    if (!card) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    card.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [selectedId, mobileView]);
+
+  // New results start from the top of the column.
+  useEffect(() => {
+    resultsColumnRef.current?.scrollTo({ top: 0 });
+  }, [results]);
+
+  const map = (
+    <PropertyMap
+      results={results}
+      selectedId={selectedId}
+      hoveredId={hoveredId}
+      onSelect={selectFromMap}
+      onHover={setHoveredId}
+      onSearchArea={handleSearchArea}
+      fitKey={query.bounds ? null : query.destination}
+    />
+  );
+
+  return (
+    <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden">
+      <Header className="lg:static" />
+
+      <div className="border-b border-line bg-surface">
+        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6">
+          <SearchBar query={query} onPatch={patch} />
+
+          <div className="mt-3">
+            <AiSearchField onPatch={patch} />
+          </div>
+
+          <div className="mt-4">
+            <FilterBar
+              query={query}
+              onPatch={patch}
+              onReset={resetFilters}
+              activeCount={activeFilters}
+            />
+          </div>
+        </div>
+      </div>
+
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 lg:min-h-0">
+        <div
+          ref={resultsColumnRef}
+          className={cn(
+            "scroll-quiet w-full px-4 py-5 sm:px-6 lg:w-[58%] lg:overflow-y-auto",
+            mobileView === "map" && "hidden lg:block",
+          )}
+        >
+          <ResultsHeader
+            count={results.length}
+            destination={query.destination}
+            sort={query.sort}
+            onSortChange={(sort) => patch({ sort })}
+          />
+
+          {query.bounds ? (
+            <button
+              type="button"
+              onClick={() => patch({ bounds: null })}
+              className="mt-3 inline-flex h-11 items-center gap-2 rounded-full border border-accent bg-accent/12 px-4 text-[13px] font-bold"
+            >
+              Wyniki z obszaru mapy · pokaż wszystkie
+            </button>
+          ) : null}
+
+          {results.length === 0 ? (
+            <div className="mt-6">
+              <EmptyState onReset={resetFilters} />
+            </div>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-3 pb-24 lg:pb-6">
+              {results.map((result) => (
+                <li key={result.property.id}>
+                  <div
+                    ref={(element) => {
+                      if (element) cardRefs.current.set(result.property.id, element);
+                      else cardRefs.current.delete(result.property.id);
+                    }}
+                  >
+                    <PropertyCard
+                      result={result}
+                      stayQuery={stayQuery}
+                      selected={selectedId === result.property.id}
+                      highlighted={hoveredId === result.property.id}
+                      favorite={favorites.includes(result.property.id)}
+                      onHover={setHoveredId}
+                      onSelect={setPickedId}
+                      onToggleFavorite={toggleFavorite}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <aside
+          aria-label="Mapa ofert"
+          className="relative hidden border-l border-line lg:block lg:w-[42%]"
+        >
+          {map}
+        </aside>
+      </main>
+
+      {/* Mobile: list and map never share the screen. */}
+      {mobileView === "map" ? (
+        <div className="fixed inset-x-0 top-[72px] bottom-0 z-30 lg:hidden">{map}</div>
+      ) : null}
+
+      <div className="fixed inset-x-0 bottom-6 z-40 flex justify-center lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileView(mobileView === "map" ? "list" : "map")}
+          className="inline-flex h-12 items-center gap-2 rounded-full bg-brand px-5 text-[15px] font-bold text-surface shadow-[0_8px_24px_-10px_rgba(24,34,29,0.65)]"
+        >
+          {mobileView === "map" ? (
+            <>
+              <List size={17} strokeWidth={2.5} />
+              Lista
+            </>
+          ) : (
+            <>
+              <MapIcon size={17} strokeWidth={2.5} />
+              Mapa
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}

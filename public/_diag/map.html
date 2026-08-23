@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Diagnostyka mapy</title>
+<link rel="stylesheet" href="/_diag/maplibre-gl.css">
+<style>
+  html,body{margin:0;height:100%;font:14px system-ui}
+  #map{position:absolute;inset:0 0 150px 0}
+  #log{position:absolute;left:0;right:0;bottom:0;height:150px;overflow:auto;
+       background:#111;color:#0f0;font:12px ui-monospace,monospace;padding:8px;white-space:pre-wrap}
+  a{color:#9f9}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="log"></div>
+<script type="module">
+const log=(...a)=>{document.getElementById('log').textContent += a.join(" ")+"\n"};
+const usePrewarm = new URLSearchParams(location.search).has('prewarm');
+window.onerror=(m)=>log("WINDOW ERROR:",m);
+
+log("tryb:", usePrewarm ? "Z prewarm() — spodziewana naprawa" : "BEZ prewarm() — symulacja StrictMode");
+log("linki: /_diag/map.html (bez)  |  /_diag/map.html?prewarm=1 (z)\n");
+
+const M = await import('/_diag/maplibre-gl.mjs');
+if (usePrewarm) { M.prewarm(); log("prewarm() wywołany"); }
+
+const opts = {style:'https://tiles.openfreemap.org/styles/positron', center:[18.6135,54.3925], zoom:11};
+
+// 1. mapa jak przy pierwszym montowaniu efektu
+const throwaway = new M.MapLibreMap({container:'map', ...opts});
+log("mapa #1 utworzona");
+
+// 2. cleanup StrictMode — usuwa ostatnią mapę, a z nią pulę workerów
+throwaway.remove();
+log("mapa #1 usunięta (cleanup StrictMode)");
+
+// 3. drugie montowanie — to jest instancja, którą widzi użytkownik
+const map = new M.MapLibreMap({container:'map', ...opts});
+log("mapa #2 utworzona — obserwuję kafelki…");
+
+let tiles = 0;
+map.on('load', ()=>log("LOAD ok | kanwa:", map.getCanvas().width+"x"+map.getCanvas().height));
+map.on('error', e=>log("MAP ERROR:", e?.error?.message || JSON.stringify(e)));
+map.on('sourcedata', e=>{ if(e.isSourceLoaded && e.sourceId){ tiles++; log("źródło gotowe:", e.sourceId); } });
+map.on('idle', ()=>log(tiles ? "✅ IDLE — kafelki dotarły, mapa działa" : "❌ IDLE — ZERO kafelków (martwa pula workerów)"));
+</script>
+</body>
+</html>
