@@ -9,9 +9,11 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/root/reservio}"
-DOMAIN="${DOMAIN:-_}"
+DOMAIN="${DOMAIN:-rezervio.pl}"
 PORT="${PORT:-3000}"
 REPO="${REPO:-https://github.com/awojcik/reservio.git}"
+# Optional: set EMAIL=... to obtain the certificate without any prompts.
+EMAIL="${EMAIL:-}"
 
 log() { printf "\n\033[1;32m==> %s\033[0m\n" "$*"; }
 
@@ -57,7 +59,12 @@ systemctl daemon-reload
 systemctl enable rezervio >/dev/null
 
 log "Nginx (domena: $DOMAIN)"
-sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__PORT__|$PORT|g" \
+if [ "$DOMAIN" = "_" ]; then
+  SERVER_NAME="_"
+else
+  SERVER_NAME="$DOMAIN www.$DOMAIN"
+fi
+sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" -e "s|__PORT__|$PORT|g" \
   "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/rezervio
 ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
 rm -f /etc/nginx/sites-enabled/default
@@ -74,8 +81,24 @@ fi
 log "Build i start aplikacji"
 bash "$APP_DIR/deploy/deploy.sh" --no-pull
 
-ip=$(curl -fsS -4 https://icanhazip.com 2>/dev/null || echo "IP_DROPLETA")
-log "Gotowe: http://${ip}"
+ip=$(curl -fsS -4 https://icanhazip.com 2>/dev/null || echo "")
+
+# HTTPS only makes sense once the A record already points here — otherwise
+# certbot fails the challenge and would abort an otherwise finished deploy.
 if [ "$DOMAIN" != "_" ]; then
-  echo "HTTPS:  snap install --classic certbot && certbot --nginx -d $DOMAIN"
+  log "HTTPS dla $DOMAIN"
+  domain_ip=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)
+
+  if [ -z "$domain_ip" ]; then
+    echo "Domena $DOMAIN jeszcze się nie rozwiązuje — pomijam certyfikat."
+    echo "Po ustawieniu rekordów A uruchom: bash $APP_DIR/deploy/tls.sh"
+  elif [ -n "$ip" ] && [ "$domain_ip" != "$ip" ]; then
+    echo "$DOMAIN wskazuje na $domain_ip, a ten droplet ma $ip — pomijam certyfikat."
+    echo "Popraw rekord A, potem uruchom: bash $APP_DIR/deploy/tls.sh"
+  else
+    bash "$APP_DIR/deploy/tls.sh" || echo "Certyfikat się nie udał — aplikacja działa po HTTP."
+  fi
 fi
+
+log "Gotowe: http://${ip:-IP_DROPLETA}"
+[ "$DOMAIN" != "_" ] && echo "Docelowo: https://$DOMAIN"
