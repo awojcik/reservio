@@ -3,6 +3,26 @@
 Aplikacja nie ma bazy danych, sekretów ani zmiennych środowiskowych — wdrożenie to
 build + proces Node za Nginxem.
 
+## Najpierw DNS
+
+Domena `rezervio.pl` musi wskazywać na dropleta **zanim** ruszy certyfikat.
+U operatora domeny (albo w DigitalOcean → Networking → Domains) ustaw:
+
+| Typ | Nazwa | Wartość        |
+| --- | ----- | -------------- |
+| A   | `@`   | IP dropleta    |
+| A   | `www` | IP dropleta    |
+
+Propagacja to zwykle kilka–kilkadziesiąt minut. Sprawdzenie z dropleta:
+
+```bash
+getent ahostsv4 rezervio.pl | head -1
+curl -s -4 https://icanhazip.com          # musi się zgadzać
+```
+
+Wdrożenie działa też bez gotowego DNS — skrypt wtedy pominie HTTPS i powie,
+czym go dokończyć.
+
 ## Szybka ścieżka (konsola webowa, jako root)
 
 Trzy krótkie polecenia — reszta dzieje się w skrypcie, więc nie ma czego wklejać:
@@ -13,23 +33,37 @@ git clone https://github.com/awojcik/reservio.git
 bash reservio/deploy/setup.sh
 ```
 
-Z własną domeną:
+Domyślną domeną jest `rezervio.pl`. Bez pytań certbota podaj e-mail:
 
 ```bash
-DOMAIN=twojadomena.pl bash reservio/deploy/setup.sh
+EMAIL=ty@example.com bash reservio/deploy/setup.sh
+```
+
+Inna domena albo sam adres IP:
+
+```bash
+DOMAIN=inna.pl bash reservio/deploy/setup.sh
+DOMAIN=_       bash reservio/deploy/setup.sh    # tylko po IP, bez HTTPS
 ```
 
 Skrypt jest idempotentny — można go uruchomić ponownie. Instaluje Node 22, pnpm i
 Nginx, dokłada 2 GB swapu przy małym RAM (bez tego `next build` pada na OOM),
-konfiguruje usługę systemd oraz reverse proxy, otwiera firewall i buduje aplikację.
+konfiguruje usługę systemd oraz reverse proxy, otwiera firewall, buduje aplikację,
+a na końcu — jeśli DNS już wskazuje na dropleta — wystawia certyfikat.
 
-Po zakończeniu aplikacja jest pod `http://IP_DROPLETA`.
+## HTTPS osobno
 
-HTTPS (wymaga domeny wskazującej na dropleta):
+Gdy DNS nie był jeszcze gotowy przy wdrożeniu:
 
 ```bash
-snap install --classic certbot && certbot --nginx -d twojadomena.pl
+bash /root/reservio/deploy/tls.sh
+# albo bez pytań:
+EMAIL=ty@example.com bash /root/reservio/deploy/tls.sh
 ```
+
+Skrypt obejmuje `rezervio.pl` i `www.rezervio.pl` (www pomija, jeśli rekord nie
+istnieje), włącza przekierowanie z HTTP i sprawdza odnowienie przez `--dry-run`.
+Odnowienia idą z timera systemd instalowanego razem z certbotem — cron niepotrzebny.
 
 ## Aktualizacja po zmianach
 
@@ -42,12 +76,13 @@ Jeśli usługa nie wstanie, skrypt sam wypisze ostatnie logi i zwróci błąd.
 
 ## Co robią pliki w `deploy/`
 
-| Plik               | Rola                                                      |
-| ------------------ | --------------------------------------------------------- |
-| `setup.sh`         | pierwsze wdrożenie na czystym systemie                     |
-| `deploy.sh`        | build + restart przy każdej kolejnej zmianie               |
-| `rezervio.service` | usługa systemd (`__APP_DIR__`, `__PORT__` wypełnia setup)  |
-| `nginx.conf`       | reverse proxy (`__DOMAIN__`, `__PORT__` wypełnia setup)    |
+| Plik               | Rola                                                          |
+| ------------------ | ------------------------------------------------------------- |
+| `setup.sh`         | pierwsze wdrożenie na czystym systemie                         |
+| `deploy.sh`        | build + restart przy każdej kolejnej zmianie                   |
+| `tls.sh`           | certyfikat Let's Encrypt dla domeny i www                      |
+| `rezervio.service` | usługa systemd (`__APP_DIR__`, `__PORT__` wypełnia setup)      |
+| `nginx.conf`       | reverse proxy (`__SERVER_NAME__`, `__PORT__` wypełnia setup)   |
 
 ## Ręcznie, krok po kroku
 
