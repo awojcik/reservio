@@ -29,12 +29,12 @@ export function ImageWithFallback({
         role="img"
         aria-label={alt}
         className={cn(
-          "flex size-full items-center justify-center bg-[#EDE7DA]",
+          "flex size-full items-center justify-center bg-placeholder",
           className,
         )}
         style={{
           backgroundImage:
-            "repeating-linear-gradient(135deg, rgba(24,34,29,0.045) 0 1px, transparent 1px 11px)",
+            "repeating-linear-gradient(135deg, rgba(16,24,20,0.05) 0 1px, transparent 1px 11px)",
         }}
       >
         <span className="text-[13px] font-extrabold tracking-tight text-ink/45">

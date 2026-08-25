@@ -53,7 +53,7 @@ export function HomeSearch() {
             list={listId}
             aria-label="Gdzie jedziesz?"
             placeholder="Miasto lub dzielnica"
-            className="w-full bg-transparent text-[15px] font-bold outline-none placeholder:font-semibold placeholder:text-muted/70"
+            className="w-full bg-transparent text-[15px] font-bold outline-none placeholder:font-semibold placeholder:text-muted"
           />
           <datalist id={listId}>
             {DESTINATION_SUGGESTIONS.map((city) => (
@@ -83,9 +83,13 @@ export function HomeSearch() {
         />
       </div>
 
+      {/*
+        Coral, not brand: on the deep pine hero a brand-coloured button would
+        sink into the background. Ink on coral, never white.
+      */}
       <button
         type="submit"
-        className="flex h-14 items-center justify-center gap-2 rounded-[11px] bg-brand px-6 text-[15px] font-bold text-surface transition-colors hover:bg-[#0d2e26]"
+        className="flex h-14 items-center justify-center gap-2 rounded-[11px] border border-accent-edge bg-accent px-6 text-[15px] font-bold text-ink transition-colors hover:bg-accent-hover"
       >
         <Search size={18} strokeWidth={2.6} />
         Szukaj

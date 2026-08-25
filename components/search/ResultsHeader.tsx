@@ -21,7 +21,11 @@ export function ResultsHeader({
 }: ResultsHeaderProps) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-      <h1 className="text-[24px] leading-tight font-bold tracking-tight" aria-live="polite">
+      {/* The page's most important heading carries the brand colour. */}
+      <h1
+        className="text-[24px] leading-tight font-bold tracking-tight text-brand"
+        aria-live="polite"
+      >
         {formatResultCount(count)}
         {destination ? (
           <span className="text-muted"> {formatDestinationPhrase(destination)}</span>

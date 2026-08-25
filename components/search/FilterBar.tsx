@@ -128,7 +128,7 @@ function PricePopover({ query, onPatch }: Pick<FilterBarProps, "query" | "onPatc
             setDraft(value);
             onPatch({ maxPrice: value >= PRICE_MAX ? null : value });
           }}
-          className="h-11 w-full accent-[#123C32]"
+          className="h-11 w-full accent-brand"
         />
 
         <div className="flex justify-between text-[12px] font-semibold text-muted">

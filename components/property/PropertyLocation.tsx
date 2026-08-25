@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 const MiniMap = dynamic(() => import("@/components/map/MiniMap"), {
   ssr: false,
   loading: () => (
-    <div className="absolute inset-0 animate-pulse bg-[#EDE7DA]" aria-hidden="true" />
+    <div className="absolute inset-0 animate-pulse bg-placeholder" aria-hidden="true" />
   ),
 });
 

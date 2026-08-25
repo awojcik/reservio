@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         className="pointer-events-none fixed inset-x-4 bottom-6 z-[60] flex justify-center sm:inset-x-0"
       >
         {message ? (
-          <div className="pointer-events-auto flex max-w-[min(30rem,100%)] items-start gap-3 rounded-[12px] border border-brand bg-brand px-4 py-3 text-surface shadow-[0_10px_30px_-16px_rgba(24,34,29,0.6)]">
+          <div className="pointer-events-auto flex max-w-[min(30rem,100%)] items-start gap-3 rounded-[12px] border border-brand bg-brand px-4 py-3 text-surface shadow-[0_10px_30px_-16px_rgba(16,24,20,0.6)]">
             <p className="text-[14px] leading-snug font-semibold">{message}</p>
             <button
               type="button"

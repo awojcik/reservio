@@ -24,7 +24,7 @@ export function PopoverContent({
         collisionPadding={12}
         className={cn(
           "z-50 rounded-[14px] border border-line bg-surface p-4",
-          "shadow-[0_8px_24px_-12px_rgba(24,34,29,0.28)]",
+          "shadow-[0_8px_24px_-12px_rgba(16,24,20,0.28)]",
           className,
         )}
         {...props}

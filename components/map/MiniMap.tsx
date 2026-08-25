@@ -49,7 +49,7 @@ export default function MiniMap({ latitude, longitude, label }: MiniMapProps) {
 
     const element = document.createElement("div");
     element.className =
-      "size-4 rounded-full border-2 border-white bg-[#FF5B45] shadow-[0_1px_4px_rgba(24,34,29,0.35)]";
+      "size-4 rounded-full border-2 border-surface bg-accent shadow-[0_1px_4px_rgba(16,24,20,0.35)]";
     element.setAttribute("aria-label", label);
 
     new maplibregl.Marker({ element }).setLngLat([longitude, latitude]).addTo(map);
@@ -62,7 +62,7 @@ export default function MiniMap({ latitude, longitude, label }: MiniMapProps) {
 
   if (failed) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#EDE7DA] text-[14px] font-semibold text-muted">
+      <div className="flex h-full items-center justify-center bg-placeholder text-[14px] font-semibold text-muted">
         Mapa jest chwilowo niedostępna
       </div>
     );

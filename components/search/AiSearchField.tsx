@@ -64,14 +64,14 @@ export function AiSearchField({ onPatch }: AiSearchFieldProps) {
           }}
           aria-label="Opisz czego szukasz"
           placeholder="Rodzina 2+2, blisko plaży, parking i basen, do 3000 zł…"
-          className="h-12 w-full bg-transparent text-[14px] font-semibold outline-none placeholder:font-medium placeholder:text-muted/70"
+          className="h-12 w-full bg-transparent text-[14px] font-semibold outline-none placeholder:font-medium placeholder:text-muted"
         />
 
         <button
           type="button"
           onClick={submit}
           aria-label="Zastosuj opis"
-          className="flex size-11 shrink-0 items-center justify-center rounded-[9px] bg-brand text-surface transition-colors hover:bg-[#0d2e26]"
+          className="flex size-11 shrink-0 items-center justify-center rounded-[9px] bg-brand text-surface transition-colors hover:bg-brand-hover"
         >
           <ArrowRight size={16} strokeWidth={2.6} />
         </button>
