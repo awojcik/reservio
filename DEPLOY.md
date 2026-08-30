@@ -119,6 +119,18 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 nginx -t && systemctl reload nginx
 ```
 
+## Stan po Milestone 01
+
+Aplikacja jest teraz monorepo: `apps/web` (Next.js) + `apps/api` (NestJS) +
+PostgreSQL. **Skrypty w tym katalogu wdrażają na razie wyłącznie frontend** —
+po zmianie na monorepo budują `@rezervio/web` i uruchamiają jego serwer
+standalone.
+
+Żeby wdrożyć całość, droplet potrzebuje dodatkowo PostgreSQL-a z rozszerzeniami
+(`containers/postgres`) oraz usługi dla API na porcie 3001 z proxy w Nginxie pod
+`/api`. To zakres osobnego milestone'u — dopóki go nie ma, wdrożony frontend nie
+ma skąd pobrać ofert.
+
 ## Rzeczy specyficzne dla tej aplikacji
 
 - **Wymagany Node ≥ 20.9** (`engines` w Next 16). Node 22 z NodeSource jest bezpieczny.

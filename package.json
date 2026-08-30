@@ -4,32 +4,25 @@
   "private": true,
   "packageManager": "pnpm@11.23.0",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-popover": "^1.1.15",
-    "date-fns": "^4.4.0",
-    "lucide-react": "^1.33.0",
-    "maplibre-gl": "^5.24.0",
-    "next": "16.3.2",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @rezervio/web dev",
+    "dev:api": "pnpm --filter @rezervio/api dev",
+    "build": "pnpm --recursive build",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm --recursive test",
+    "db:start": "bash scripts/infra.sh start",
+    "db:stop": "bash scripts/infra.sh stop",
+    "db:reset": "pnpm infra:reset && pnpm db:migrate && pnpm db:seed",
+    "db:migrate": "pnpm --filter @rezervio/api db:migrate",
+    "db:seed": "pnpm --filter @rezervio/api db:seed",
+    "db:generate": "pnpm --filter @rezervio/api db:generate",
+    "api:types": "pnpm --filter @rezervio/api-client generate",
+    "infra:start": "bash scripts/infra.sh start",
+    "infra:stop": "bash scripts/infra.sh stop",
+    "infra:reset": "bash scripts/infra.sh reset"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "eslint": "^9.39.0",
-    "eslint-config-next": "16.3.2",
-    "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "typescript": "^5.9.3"
   }
 }

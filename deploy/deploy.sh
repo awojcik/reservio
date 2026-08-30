@@ -17,14 +17,15 @@ log "Zależności"
 pnpm install --frozen-lockfile
 
 log "Build"
-pnpm build
+pnpm --filter @rezervio/web build
 
 # `output: standalone` emits the server but not the assets it serves.
 # The targets must be removed first: `cp -r a b` nests a *inside* b when b exists.
 log "Kopiuję assety do standalone"
-rm -rf .next/standalone/.next/static .next/standalone/public
-cp -r .next/static .next/standalone/.next/static
-[ -d public ] && cp -r public .next/standalone/public
+WEB=apps/web
+rm -rf "$WEB/.next/standalone/apps/web/.next/static" "$WEB/.next/standalone/apps/web/public"
+cp -r "$WEB/.next/static" "$WEB/.next/standalone/apps/web/.next/static"
+[ -d "$WEB/public" ] && cp -r "$WEB/public" "$WEB/.next/standalone/apps/web/public"
 
 log "Restart usługi"
 systemctl restart rezervio

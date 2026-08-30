@@ -10,7 +10,7 @@ Environment=NODE_ENV=production
 Environment=PORT=__PORT__
 # Listen on loopback only — nginx is the public entry point.
 Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/bin/node .next/standalone/server.js
+ExecStart=/usr/bin/node apps/web/.next/standalone/apps/web/server.js
 Restart=always
 RestartSec=5
 

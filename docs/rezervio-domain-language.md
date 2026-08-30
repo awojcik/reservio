@@ -53,15 +53,30 @@ Poniższe nazwy są nazwami kanonicznymi. Używamy ich konsekwentnie w:
 
 ## User
 
-Osoba posiadająca konto w Rezervio.
+Osoba posiadająca konto w Rezervio. **Jedna wspólna tożsamość.**
 
-User może być:
+```text
+User
+├── Guest — przez swoje Booking
+└── Host  — przez opcjonalny profil Host
+```
 
-- Guest,
-- Host,
-- jednocześnie Guest i Host.
+Ta sama osoba może jednocześnie rezerwować cudze obiekty i wystawiać własne.
+Nie tworzymy osobnych tożsamości logowania ani osobnych encji:
 
-Nie tworzymy osobnych tożsamości logowania dla Guest i Host.
+```text
+GuestAccount    ← nie istnieje
+HostAccount     ← nie istnieje
+```
+
+**Guest to rola i kontekst, nie encja.** Nie ma tabeli `guests`: bycie Guestem
+oznacza po prostu posiadanie Booking.
+
+**Host to opcjonalny profil**, a nie konto. `hosts.user_id` wskazuje na User;
+konto bez profilu Host jest w pełni poprawne, a `auth/me` zwraca wtedy
+`host: null`.
+
+Konto **nigdy nie jest wymagane do rezerwacji** — patrz `GuestBookingAccess`.
 
 **Nazwa kanoniczna:**
 
@@ -80,9 +95,58 @@ AccountOwner
 
 ---
 
+## UserSession
+
+Serwerowa sesja logowania User.
+
+Rezervio używa **opaque server-side sessions**, nie JWT: token jest losowym
+ciągiem bez znaczenia semantycznego, a źródłem prawdy o ważności sesji jest
+baza danych.
+
+**Nazwa kanoniczna:**
+
+```text
+UserSession
+```
+
+Nie używamy zamiennie:
+
+```text
+Token
+Ticket
+Credential
+LoginSession
+```
+
+Zasady:
+
+```text
+token   >= 32 bajty entropii
+w bazie zapisujemy wyłącznie hash tokena
+transport: HttpOnly cookie
+nigdy localStorage/sessionStorage
+```
+
+Wygaśnięta UserSession nie daje żadnych uprawnień, niezależnie od tego, czy
+rekord został już fizycznie usunięty.
+
+Sesji nie logujemy — ani tokena, ani jego hasha.
+
+---
+
 ## Guest
 
-User, który wyszukuje Property i dokonuje Booking.
+Rola: osoba, która wyszukuje Property i dokonuje Booking.
+
+Guest **nie musi mieć konta**. Rezerwacja anonimowa jest pełnoprawna:
+
+```text
+guest_user_id                  = NULL
+guest_name/email/phone         = snapshot
+```
+
+Kiedy Booking składa zalogowany User, zapisujemy dodatkowo `guest_user_id` —
+ale snapshot i tak powstaje.
 
 **Nazwa kanoniczna:**
 
@@ -434,15 +498,33 @@ Tymczasowa blokada inventory na czas finalizacji rezerwacji/płatności.
 BookingHold
 ```
 
-Przykładowy TTL:
+TTL (`BOOKING_HOLD_TTL_SECONDS`):
 
 ```text
 10 minut
 ```
 
-Aktywny BookingHold blokuje kolidujące terminy.
+Statusy:
 
-Wygasły BookingHold nie wpływa na Availability.
+```text
+ACTIVE
+RELEASED
+EXPIRED
+CONVERTED
+```
+
+Jeden Hold na Booking — wymuszone unikalnym indeksem, żeby ponowiona komenda
+nie mogła utworzyć drugiego.
+
+BookingHold blokuje termin **tylko** gdy:
+
+```text
+status = ACTIVE  AND  expiresAt > now()
+```
+
+Wygasły Hold nie wpływa na Availability **natychmiast**, niezależnie od tego,
+czy job sprzątający zdążył się wykonać. Dostępność nigdy nie zależy od tego, że
+worker zadziałał na czas.
 
 ---
 
@@ -619,14 +701,246 @@ ExternalCalendar
 Provider może być np.:
 
 ```text
-ICAL
-AIRBNB
 BOOKING
+AIRBNB
+VRBO
 PMS
 OTHER
 ```
 
 Provider jest metadanym integracji, a nie częścią modelu Availability.
+
+iCal to **transport**, nie provider — dlatego nie występuje na tej liście.
+
+Adres importu (`importUrl`) traktujemy jak sekret: zwykle zawiera token w
+ścieżce. Trzymamy go zaszyfrowany (AES-256-GCM), nie logujemy i nie zwracamy
+w całości przez API — na zewnątrz idzie wyłącznie wersja zamaskowana.
+
+ExternalCalendar jest **eventually consistent**: synchronizacja jest okresowa,
+więc PostgreSQL może przez chwilę nie znać najświeższej zmiany w źródle.
+
+---
+
+## Booking.guestUserId
+
+Powiązanie Booking z kontem — **opcjonalne**.
+
+```text
+guest_user_id = NULL       rezerwacja anonimowa
+guest_user_id = User.id    rezerwacja przypisana do konta
+```
+
+My Trips czyta wyłącznie po `guest_user_id`. **Nigdy nie wyszukujemy Booking po
+adresie email.**
+
+---
+
+## Guest snapshot
+
+Dane podane przy składaniu konkretnego Booking:
+
+```text
+guest_name
+guest_email
+guest_phone
+property_title_snapshot
+property_city_snapshot
+cover_image_url_snapshot
+price snapshot
+```
+
+Snapshot **nie znika** po ustawieniu `guest_user_id` i **nie zmienia się**, gdy
+User później edytuje profil. To zapis tego, co zostało uzgodnione, a nie kopia
+aktualnych danych.
+
+Dzięki snapshotowi podróż pozostaje czytelna także po zarchiwizowaniu Property.
+
+---
+
+## Booking claim
+
+Bezpieczne przypisanie anonimowego Booking do konta.
+
+**Nazwa kanoniczna:**
+
+```text
+claimBookingForCurrentUser
+```
+
+Wymaga **jednocześnie trzech rzeczy**:
+
+```text
+zalogowany User
++ ważny GuestBookingAccess token dla tego Booking
++ zgodny (znormalizowany) adres email
+```
+
+Czego **nie** wystarcza:
+
+```text
+sam publicReference   ← jest drukowany w mailu i dyktowany przez telefon
+sam adres email       ← jest wiedzą publiczną
+```
+
+Claim jest idempotentny dla właściciela. Booking przypisany do innego User
+zwraca `409 BOOKING_ALREADY_CLAIMED` — przejęcie jest niemożliwe.
+
+---
+
+## GuestBookingAccess
+
+Sposób, w jaki Guest bez konta dostaje się do własnego Booking.
+
+**Nazwa kanoniczna:**
+
+```text
+GuestBookingAccess
+```
+
+Rozróżnienie krytyczne:
+
+```text
+publicReference  = identyfikator  (jawny, drukowany w mailu, dyktowany przez telefon)
+access token     = sekret         (32 bajty, hash w bazie, odwoływalny)
+```
+
+`publicReference` **nigdy** nie jest sekretem uwierzytelniającym. Sam numer
+rezerwacji nie daje dostępu do niczego.
+
+Token:
+
+```text
+>= 32 bajty entropii
+w bazie wyłącznie hash
+wymieniany na HttpOnly cookie, żeby zniknąć z adresu URL
+odwoływalny
+nie trafia do logów
+```
+
+---
+
+## BookingEvent
+
+Wpis w historii Booking.
+
+**Nazwa kanoniczna:**
+
+```text
+BookingEvent
+```
+
+Typy: `BOOKING_CREATED`, `HOST_ACCEPTED`, `HOST_REJECTED`, `REQUEST_EXPIRED`,
+`GUEST_CANCELLED`, `HOST_CANCELLED`, `HOLD_CREATED`, `HOLD_EXPIRED`,
+`HOLD_RELEASED`.
+
+Actor: `GUEST`, `HOST`, `SYSTEM`.
+
+BookingEvent służy do audytu i osi czasu. **Nie jest źródłem prawdy o statusie** —
+tym pozostaje `bookings.status`. Nie zapisujemy w nim sekretów ani pełnych
+payloadów żądań.
+
+---
+
+## Booking status reason
+
+Powód, dla którego Booking opuścił ścieżkę pozytywną. Zbiór zamknięty:
+
+```text
+GUEST_CANCELLED         gość anulował
+HOST_CANCELLED          gospodarz anulował
+HOST_REJECTED           gospodarz odrzucił prośbę
+HOST_RESPONSE_TIMEOUT   gospodarz nie odpowiedział przed deadline
+HOLD_EXPIRED            blokada terminu wygasła
+AVAILABILITY_LOST       termin zajął się, zanim gospodarz odpowiedział
+```
+
+Nie używamy dowolnych stringów.
+
+---
+
+## Request expiration
+
+Prośba o rezerwację ma **deadline** zapisany w kolumnie
+`bookings.host_response_deadline_at`.
+
+Baza jest źródłem prawdy: API odmawia akceptacji po deadline nawet wtedy, gdy
+job wygaszający jeszcze się nie wykonał. Kolejka tylko domyka status.
+
+Po upływie deadline:
+
+```text
+status       = EXPIRED
+statusReason = HOST_RESPONSE_TIMEOUT
+```
+
+---
+
+## Cancellation
+
+Dwie komendy, oba kierunki:
+
+```text
+cancelBookingByGuest   → statusReason = GUEST_CANCELLED
+cancelBookingByHost    → statusReason = HOST_CANCELLED
+```
+
+Dozwolone dla `PENDING_HOST_APPROVAL` i `PENDING_PAYMENT`.
+
+Anulowanie `PENDING_PAYMENT` **musi** zwolnić `BookingHold` i usunąć jego
+`AvailabilityBlock` — transakcyjnie, pod advisory lockiem Property. Inaczej
+kalendarz zostałby zablokowany przez rezerwację, której już nie ma.
+
+Anulowanie `CONFIRMED` jest poza zakresem, dopóki nie istnieją zwroty.
+
+Obie komendy są idempotentne: anulowanie już anulowanej rezerwacji nic nie
+zmienia i nie tworzy drugiego BookingEvent.
+
+---
+
+## Notification
+
+Powiadomienie jest **side effectem**, nigdy częścią transakcji biznesowej.
+
+```text
+transakcja Booking + zapis do outboxa
+        ↓ commit
+outbox → BullMQ → email provider
+```
+
+Każde powiadomienie ma logiczny `dedupKey` (np. `booking-request-accepted:{id}`)
+z unikalnym indeksem — ponowienie nie wysyła drugiego maila.
+
+Poprawność Booking nie zależy od powodzenia wysyłki.
+
+---
+
+## CalendarExportToken
+
+Odwoływalny sekret, pod którym Rezervio publikuje kalendarz Property jako feed
+iCal dla systemów zewnętrznych.
+
+**Nazwa kanoniczna:**
+
+```text
+CalendarExportToken
+```
+
+Zasady:
+
+```text
+token   >= 32 bajty entropii
+w bazie zapisujemy wyłącznie hash tokena
+raw token pokazujemy dokładnie raz, przy tworzeniu lub rotacji
+rotacja unieważnia poprzedni token
+```
+
+Eksport obejmuje wyłącznie `HOST_BLOCK`.
+
+Nigdy nie eksportujemy `EXTERNAL_CALENDAR` — odesłanie cudzej blokady do jej
+własnego źródła powoduje pętlę, w której dwa kalendarze blokują się nawzajem
+w nieskończoność.
+
+Feed nie zawiera notatek Host, nazwy providera ani danych osobowych.
 
 ---
 
@@ -664,85 +978,94 @@ Logika domenowa nie może być zależna od konkretnego PMS.
 
 # 3. Booking State Machine
 
-Rekomendowane statusy MVP:
+Statusy kanoniczne:
 
 ```text
-DRAFT
-PENDING
-HOLD
+PENDING_HOST_APPROVAL
+PENDING_PAYMENT
 CONFIRMED
 CANCELLED
 EXPIRED
 COMPLETED
 ```
 
-## DRAFT
+## PENDING_HOST_APPROVAL
 
-Nieukończony flow.
+Prośba czeka na decyzję Host (`REQUEST_TO_BOOK`).
 
-## PENDING
+**Nie blokuje terminu.** Dopóki Host nie zaakceptuje, Property pozostaje
+dostępne dla innych — inaczej niezdecydowany gospodarz zamrażałby kalendarz.
 
-BookingRequest czekający na decyzję Host.
+## PENDING_PAYMENT
 
-## HOLD
-
-Termin tymczasowo zablokowany.
+Termin jest zabezpieczony aktywnym `BookingHold`, Booking czeka na płatność.
 
 ## CONFIRMED
 
-Booking potwierdzony.
+Płatność się powiodła. Osiągalny **wyłącznie** przez Payment workflow.
 
 ## CANCELLED
 
-Booking anulowany.
+Booking anulowany, np. odrzucony przez Host (`HOST_REJECTED`).
 
 ## EXPIRED
 
-Flow/Hold wygasł przed potwierdzeniem.
+Hold wygasł (`HOLD_EXPIRED`) albo termin zajął się, zanim Host odpowiedział
+(`AVAILABILITY_LOST`).
 
 ## COMPLETED
 
-Stay już się zakończył.
+Stay się zakończył.
 
-Przykładowe przejścia:
-
-```text
-DRAFT
-  ↓
-HOLD
-  ↓
-CONFIRMED
-  ↓
-COMPLETED
-```
-
-Request-to-book:
+Dozwolone przejścia:
 
 ```text
-PENDING
-  ↓
-CONFIRMED
+PENDING_HOST_APPROVAL → PENDING_PAYMENT   (Host akceptuje)
+PENDING_HOST_APPROVAL → CANCELLED         (Host odrzuca)
+PENDING_HOST_APPROVAL → EXPIRED           (termin zajęty w międzyczasie)
+
+PENDING_PAYMENT       → CONFIRMED         (płatność — Milestone 05)
+PENDING_PAYMENT       → EXPIRED           (Hold wygasł)
+PENDING_PAYMENT       → CANCELLED
+
+CONFIRMED             → COMPLETED
+CONFIRMED             → CANCELLED
 ```
 
-Wygaśnięcie:
+`CANCELLED`, `EXPIRED` i `COMPLETED` są stanami końcowymi.
+
+Nie ustawiamy statusów bezpośrednio z kontrolera i nie mamy generycznego
+`updateBookingStatus`. Każde przejście to nazwana komenda:
 
 ```text
-HOLD
-  ↓
-EXPIRED
+createBooking
+acceptBookingRequest
+rejectBookingRequest
+expireBookingHold
+releaseBookingHold
 ```
 
-Anulowanie:
+---
+
+## BookingMode
+
+Sposób, w jaki Property przyjmuje rezerwacje.
+
+**Nazwa kanoniczna:**
 
 ```text
-PENDING   → CANCELLED
-HOLD      → CANCELLED
-CONFIRMED → CANCELLED
+BookingMode
 ```
 
-Nie ustawiamy dowolnych statusów bezpośrednio z kontrolera.
+Wartości:
 
-Przejścia statusów należą do logiki domenowej/aplikacyjnej.
+```text
+REQUEST_TO_BOOK   domyślny — Host akceptuje każdą rezerwację
+INSTANT_BOOK      Guest rezerwuje od razu
+```
+
+Tryb wybiera **backend** na podstawie Property. Klient nie może o niego
+poprosić ani go pominąć.
 
 ---
 
@@ -813,6 +1136,20 @@ Zawsze:
 ```
 
 Booking kończący się 16 września nie blokuje nowego check-in 16 września.
+
+Ta sama konwencja obowiązuje w bazie: `AvailabilityBlock.dateRange` to
+PostgreSQL `daterange` z nawiasem `'[)'`, a overlap sprawdzamy operatorem `&&`.
+
+Kanoniczna reguła dostępności ma jedną definicję:
+
+```text
+available = NOT EXISTS AvailabilityBlock overlapping requested Stay
+```
+
+Obowiązuje identycznie w Search, publicznym availability API, Property detail
+i w przyszłej walidacji Booking. Nie tworzymy drugiej definicji overlap.
+
+Availability modelujemy **zakresami**, nigdy wierszem na każdy dzień.
 
 ---
 
@@ -1248,6 +1585,7 @@ Rekomendowane pola:
 ```text
 id
 propertyId
+objectKey
 url
 position
 altText
@@ -1262,6 +1600,32 @@ position
 ```
 
 Nie polegamy na kolejności inserta.
+
+`position = 0` oznacza cover.
+
+## objectKey
+
+Zdjęcia trzymamy w **S3-compatible Object Storage**, nie jako blob w bazie.
+
+```text
+objectKey = tożsamość pliku w storage
+url       = adres publiczny (może być wyliczany z objectKey)
+```
+
+`objectKey` jest source of truth dla operacji storage (upload, delete).
+
+Klucz nadaje serwer, np.:
+
+```text
+properties/{propertyId}/{uuid}.{ext}
+```
+
+Nigdy nie używamy oryginalnej nazwy pliku jako finalnego klucza.
+
+Upload odbywa się przez **presigned URL** — przeglądarka wysyła plik wprost do
+storage, a backend zapisuje dopiero potwierdzony PropertyImage.
+
+Presigned URL jest poświadczeniem: nie trafia do logów.
 
 ---
 
@@ -1683,7 +2047,9 @@ Preferuj prostszy model.
 
 | Pojęcie biznesowe | Nazwa w kodzie |
 |---|---|
-| użytkownik | `User` |
+| użytkownik (wspólna tożsamość) | `User` |
+| przypisanie rezerwacji do konta | `Booking.guestUserId` |
+| sesja logowania | `UserSession` |
 | gość | `Guest` |
 | gospodarz/operator | `Host` |
 | obiekt | `Property` |
@@ -1695,14 +2061,19 @@ Preferuj prostszy model.
 | kalkulacja ceny | `PriceQuote` |
 | rezerwacja | `Booking` |
 | blokada checkoutu | `BookingHold` |
+| tryb rezerwacji | `BookingMode` |
 | prośba o akceptację | `BookingRequest` |
 | płatność gościa | `Payment` |
 | wypłata Host | `Payout` |
 | prowizja Rezervio | `PlatformFee` |
 | zwrot | `Refund` |
 | reguły anulowania | `CancellationPolicy` |
+| zdjęcie obiektu | `PropertyImage` |
 | udogodnienie | `Amenity` |
 | zewnętrzny kalendarz | `ExternalCalendar` |
+| dostęp gościa do rezerwacji | `GuestBookingAccess` |
+| wpis historii rezerwacji | `BookingEvent` |
+| token eksportu iCal | `CalendarExportToken` |
 | adapter PMS/inventory | `InventoryProvider` |
 
 ---

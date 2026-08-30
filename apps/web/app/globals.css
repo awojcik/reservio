@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+/*
+ * Rezervio design tokens.
+ * The raw variables are the contract from the design spec; the @theme block
+ * exposes them to Tailwind as `bg-surface`, `text-muted`, `border-line`, ...
+ */
+:root {
+  --background: #f7f3ea;
+  --surface: #fffdf8;
+
+  --text-primary: #101814;
+  --text-secondary: #69716c;
+
+  --brand: #0b2f27;
+  --accent: #ff4a32;
+  --highlight: #cfff3d;
+
+  --border: #d9d5ca;
+  --success: #167552;
+
+  /* Derived shades — interaction states and placeholders, so no component
+     needs a literal colour of its own. */
+  --brand-hover: #0f3d33;
+  --brand-active: #071f1a;
+  --accent-hover: #ff6349;
+  --accent-edge: #e63a1e;
+  --placeholder: #ebe4d5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-brand: var(--brand);
+  --color-accent: var(--accent);
+  --color-highlight: var(--highlight);
+  --color-line: var(--border);
+  --color-success: var(--success);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-edge: var(--accent-edge);
+  --color-placeholder: var(--placeholder);
+
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+
+  /* One consistent, high-contrast focus ring everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--highlight);
+    color: var(--text-primary);
+  }
+}
+
+@layer components {
+  /* Vertical rhythm helper for the editorial section headers. */
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /*
+   * Map markers are created imperatively by MapLibre, so their states live
+   * here rather than as literals in the component. Coral by default, lime for
+   * the single best-value stay, deep pine when selected — selected always wins.
+   */
+  .map-marker {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 9px;
+    border: 1px solid var(--accent-edge);
+    background: var(--accent);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgb(16 24 20 / 0.18);
+    transition:
+      background-color 150ms,
+      border-color 150ms,
+      color 150ms;
+  }
+
+  .map-marker[data-state="value"] {
+    background: var(--highlight);
+    border-color: #a8d420;
+  }
+
+  .map-marker[data-state="active"] {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--surface);
+  }
+}
+
+@layer utilities {
+  .tracking-tightest {
+    letter-spacing: -0.03em;
+  }
+
+  /* Results column scrollbar: present, but visually quiet. */
+  .scroll-quiet {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .scroll-quiet::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .scroll-quiet::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+    border: 3px solid var(--background);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* MapLibre: strip the default chrome so the map stays quiet. */
+.maplibregl-ctrl-attrib {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent) !important;
+}
+
+.maplibregl-ctrl-group {
+  border: 1px solid var(--border) !important;
+  box-shadow: none !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--border) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
