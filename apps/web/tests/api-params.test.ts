@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { toSearchParams } from "@/lib/api";
-import { BEACH_RADIUS, EMPTY_QUERY, buildSearchParams, parseSearchQuery } from "@/lib/search";
+import {
+  BEACH_RADIUS,
+  EMPTY_QUERY,
+  buildSearchParams,
+  hasSearchCriteria,
+  parseSearchQuery,
+} from "@/lib/search";
 import type { SearchQuery } from "@/lib/types";
 
 const query = (overrides: Partial<SearchQuery> = {}): SearchQuery => ({
@@ -16,16 +22,30 @@ const query = (overrides: Partial<SearchQuery> = {}): SearchQuery => ({
  */
 describe("toSearchParams", () => {
   it("passes the stay and guests through unchanged", () => {
-    const params = toSearchParams(query());
+    const params = toSearchParams(
+      query({ destination: "Gdańsk", checkIn: "2026-09-12", checkOut: "2026-09-16" }),
+    );
 
     expect(params).toMatchObject({
       destination: "Gdańsk",
       checkIn: "2026-09-12",
       checkOut: "2026-09-16",
       adults: 2,
-      children: 2,
+      children: 0,
       sort: "RECOMMENDED",
     });
+  });
+
+  /**
+   * A first-time visitor has chosen nothing. Sending a demo destination and a
+   * demo week would answer a question nobody asked (§4).
+   */
+  it("sends no destination and no dates for a blank search", () => {
+    const params = toSearchParams(query());
+
+    expect(params.destination).toBeFalsy();
+    expect(params.checkIn).toBeFalsy();
+    expect(params.checkOut).toBeFalsy();
   });
 
   it("converts the price cap from złoty to minor units", () => {
@@ -100,6 +120,50 @@ describe("URL state", () => {
 
     expect(restored.sort).toBe("recommended");
     expect(restored.adults).toBe(2);
-    expect(restored.checkIn).toBe(EMPTY_QUERY.checkIn);
+    expect(restored.checkIn).toBe("");
+  });
+
+  /** No parameters means no search — not a search for somewhere in particular. */
+  it("parses an empty URL to a blank query", () => {
+    expect(parseSearchQuery(new URLSearchParams(""))).toEqual(EMPTY_QUERY);
+  });
+
+  /**
+   * A stay is both dates or neither. One alone cannot price anything, and
+   * would reach `parseISO` in the calendar as an Invalid Date (§4).
+   */
+  it("ignores half a stay", () => {
+    const onlyIn = parseSearchQuery(new URLSearchParams("checkIn=2026-09-12"));
+    expect(onlyIn.checkIn).toBe("");
+    expect(onlyIn.checkOut).toBe("");
+
+    const onlyOut = parseSearchQuery(new URLSearchParams("checkOut=2026-09-16"));
+    expect(onlyOut.checkOut).toBe("");
+  });
+
+  it("ignores a stay that is malformed or backwards", () => {
+    expect(
+      parseSearchQuery(new URLSearchParams("checkIn=wczoraj&checkOut=jutro")).checkIn,
+    ).toBe("");
+
+    // Check-out before check-in is not a stay.
+    expect(
+      parseSearchQuery(new URLSearchParams("checkIn=2026-09-16&checkOut=2026-09-12"))
+        .checkIn,
+    ).toBe("");
+  });
+
+  it("keeps a blank query out of the URL entirely", () => {
+    expect(buildSearchParams(EMPTY_QUERY).toString()).toBe("");
+  });
+
+  it("knows when a query is worth remembering", () => {
+    expect(hasSearchCriteria(EMPTY_QUERY)).toBe(false);
+    expect(hasSearchCriteria(query({ destination: "Sopot" }))).toBe(true);
+    expect(
+      hasSearchCriteria(query({ checkIn: "2026-09-12", checkOut: "2026-09-16" })),
+    ).toBe(true);
+    // Filters alone are not a search: there is nothing to search through yet.
+    expect(hasSearchCriteria(query({ pool: true }))).toBe(false);
   });
 });

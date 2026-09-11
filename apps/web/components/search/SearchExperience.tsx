@@ -17,9 +17,12 @@ import { FilterBar } from "./FilterBar";
 import { ResultsHeader } from "./ResultsHeader";
 import { SearchBar } from "./SearchBar";
 import { cn } from "@/lib/cn";
+import { readLastSearch, writeLastSearch } from "@/lib/last-search";
 import {
+  EMPTY_QUERY,
   buildSearchParams,
   countActiveFilters,
+  hasSearchCriteria,
   parseSearchQuery,
 } from "@/lib/search";
 import type { MapBounds, SearchQuery } from "@/lib/types";
@@ -39,6 +42,34 @@ export function SearchExperience({ identity }: { identity: HeaderIdentity }) {
   const query = useMemo(() => parseSearchQuery(searchParams), [searchParams]);
   const { items: results, total, status, error, retry } = useSearchResults(query);
   const activeFilters = countActiveFilters(query);
+
+  /**
+   * The URL is the search. Nothing else may change it.
+   *
+   * The one exception is arriving with a bare `/search`: there is nothing to
+   * honour, so the previous search on this device is restored into the URL —
+   * which then becomes the search like any other. A visitor who follows a link
+   * with parameters keeps those parameters, whatever this browser remembers
+   * (§4).
+   */
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+
+    if (searchParams.toString().length > 0) return;
+
+    const last = readLastSearch();
+    if (!last) return;
+
+    router.replace(`/search?${buildSearchParams(last).toString()}`, { scroll: false });
+  }, [router, searchParams]);
+
+  // Remembered only once it says something worth repeating.
+  useEffect(() => {
+    writeLastSearch(query);
+  }, [query]);
 
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -69,11 +100,15 @@ export function SearchExperience({ identity }: { identity: HeaderIdentity }) {
   // The stay travels with the guest into the detail page.
   const stayQuery = useMemo(
     () =>
-      new URLSearchParams({
+      // Empty dates are omitted rather than sent as blanks: the detail page
+      // reads them back through the same parser, and "checkIn=" would be a
+      // parameter that means nothing.
+      buildSearchParams({
+        ...EMPTY_QUERY,
         checkIn: query.checkIn,
         checkOut: query.checkOut,
-        adults: String(query.adults),
-        children: String(query.children),
+        adults: query.adults,
+        children: query.children,
       }).toString(),
     [query.checkIn, query.checkOut, query.adults, query.children],
   );
@@ -206,7 +241,16 @@ export function SearchExperience({ identity }: { identity: HeaderIdentity }) {
             <ResultsSkeleton />
           ) : results.length === 0 ? (
             <div className="mt-6">
-              <EmptyState onReset={resetFilters} />
+              {/*
+                Two different situations that used to look identical: a search
+                that found nothing, and no search at all. The second is a
+                first-time visitor, and telling them to "clear the filters"
+                would be nonsense (§5).
+              */}
+              <EmptyState
+                onReset={resetFilters}
+                blank={!hasSearchCriteria(query) && activeFilters === 0}
+              />
             </div>
           ) : (
             <ul className="mt-4 flex flex-col gap-3 pb-24 lg:pb-6">

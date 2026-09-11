@@ -639,7 +639,9 @@ describe("validation and ownership", () => {
       url: "/api/host/bookings",
       cookies: stranger.cookies,
     });
-    expect(list.json()).toHaveLength(0);
+    // The list is paginated now: { items, total, hasMore } (milestone 07 §22).
+    expect(list.json().items).toHaveLength(0);
+    expect(list.json().total).toBe(0);
   });
 
   it("does not leak Guest contact through the public endpoint", async () => {

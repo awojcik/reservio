@@ -49,13 +49,25 @@ export class OutboxService {
    *
    * `FOR UPDATE SKIP LOCKED` lets several processors run without handing the
    * same row to two of them, and without one slow row blocking the queue.
+   *
+   * `types` scopes a processor to the events it knows how to dispatch. Without
+   * it, two pumps over one table would steal each other's rows and each would
+   * mark the other's work processed without doing it (milestone 12 §27).
    */
-  async claimPending(limit = 50): Promise<ClaimedOutboxEvent[]> {
+  async claimPending(limit = 50, types?: string[]): Promise<ClaimedOutboxEvent[]> {
     return this.database.db.transaction(async (tx) => {
       const rows = (await tx.execute(sql`
         SELECT id, type, aggregate_id, payload_json
         FROM outbox_events
         WHERE status = 'PENDING'
+          ${
+            types && types.length > 0
+              ? sql`AND type IN (${sql.join(
+                  types.map((type) => sql`${type}`),
+                  sql`, `,
+                )})`
+              : sql``
+          }
         ORDER BY created_at ASC
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED

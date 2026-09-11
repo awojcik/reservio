@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ApiError } from "@rezervio/api-client";
 
 import { PropertyEditor } from "@/components/host/PropertyEditor";
+import { StayInformationEditor } from "@/components/host/StayInformationEditor";
 import { createSessionApiClient } from "@/lib/api-server";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -18,10 +19,14 @@ export default async function HostPropertyEditorPage({ params }: PageProps) {
   // render-time error would not be caught here anyway.
   let property;
   let amenities;
+  let stayInformation;
+  let sensitiveAccess;
   try {
-    [property, amenities] = await Promise.all([
+    [property, amenities, stayInformation, sensitiveAccess] = await Promise.all([
       client.getHostProperty(id, { cache: "no-store" }),
       client.listAmenities({ cache: "no-store" }),
+      client.getHostStayInformation(id, { cache: "no-store" }),
+      client.getHostSensitiveAccess(id, { cache: "no-store" }),
     ]);
   } catch (error) {
     // A Property owned by somebody else answers 404 — the Host area shows the
@@ -31,9 +36,17 @@ export default async function HostPropertyEditorPage({ params }: PageProps) {
   }
 
   return (
-    <PropertyEditor
-      initial={property}
-      amenityCodes={amenities.map((amenity) => amenity.code)}
-    />
+    <>
+      <PropertyEditor
+        initial={property}
+        amenityCodes={amenities.map((amenity) => amenity.code)}
+      />
+      <StayInformationEditor
+        propertyId={property.id}
+        timeZone={stayInformation.timeZone}
+        initialStay={stayInformation}
+        initialAccess={sensitiveAccess}
+      />
+    </>
   );
 }

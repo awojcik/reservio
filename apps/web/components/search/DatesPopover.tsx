@@ -25,6 +25,11 @@ import { differenceInCalendarDays } from "date-fns";
 
 const WEEKDAYS = ["pn", "wt", "śr", "cz", "pt", "so", "nd"];
 
+/** The month the calendar opens on: the chosen check-in, or this month. */
+function monthOf(checkIn: string): Date {
+  return startOfMonth(checkIn ? parseISO(checkIn) : new Date());
+}
+
 type DatesPopoverProps = {
   checkIn: string;
   checkOut: string;
@@ -41,12 +46,18 @@ export function DatesPopover({
   onChange,
 }: DatesPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => startOfMonth(parseISO(checkIn)));
+  const [month, setMonth] = useState(() => monthOf(checkIn));
   const [pendingStart, setPendingStart] = useState<Date | null>(null);
 
-  const from = parseISO(checkIn);
-  const to = parseISO(checkOut);
-  const nights = Math.max(1, differenceInCalendarDays(to, from));
+  /*
+   * A visitor who has not chosen a stay yet is the normal first state, not an
+   * edge case. Without this guard `parseISO("")` produces an Invalid Date and
+   * every comparison below silently stops working (§5).
+   */
+  const chosen = Boolean(checkIn && checkOut);
+  const from = chosen ? parseISO(checkIn) : null;
+  const to = chosen ? parseISO(checkOut) : null;
+  const nights = from && to ? Math.max(1, differenceInCalendarDays(to, from)) : 0;
 
   const days = eachDayOfInterval({
     start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
@@ -75,7 +86,7 @@ export function DatesPopover({
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) setPendingStart(null);
-        if (next) setMonth(startOfMonth(parseISO(checkIn)));
+        if (next) setMonth(monthOf(checkIn));
       }}
     >
       <PopoverTrigger asChild>
@@ -88,8 +99,13 @@ export function DatesPopover({
             <span className="block text-[11px] font-bold tracking-[0.1em] text-muted uppercase">
               Termin
             </span>
-            <span className="block truncate text-[15px] font-bold">
-              {formatDateRange(checkIn, checkOut)}
+            <span
+              className={cn(
+                "block truncate text-[15px] font-bold",
+                !chosen && "text-muted",
+              )}
+            >
+              {chosen ? formatDateRange(checkIn, checkOut) : "Dowolny termin"}
             </span>
           </span>
         </button>
@@ -131,10 +147,12 @@ export function DatesPopover({
             const outside = !isSameMonth(day, month);
             const isStart = pendingStart
               ? isSameDay(day, pendingStart)
-              : isSameDay(day, from);
-            const isEnd = !pendingStart && isSameDay(day, to);
+              : from !== null && isSameDay(day, from);
+            const isEnd = !pendingStart && to !== null && isSameDay(day, to);
             const inRange =
               !pendingStart &&
+              from !== null &&
+              to !== null &&
               isBefore(from, day) &&
               isBefore(day, to) &&
               !isStart &&
@@ -167,7 +185,9 @@ export function DatesPopover({
         <p className="mt-3 border-t border-line pt-3 text-[13px] text-muted">
           {pendingStart
             ? `Wybierz datę wyjazdu — przyjazd ${format(pendingStart, "d MMMM", { locale: pl })}`
-            : `${formatNights(nights)} · kliknij, aby wybrać nowy termin`}
+            : chosen
+              ? `${formatNights(nights)} · kliknij, aby wybrać nowy termin`
+              : "Kliknij datę przyjazdu, potem wyjazdu"}
         </p>
       </PopoverContent>
     </Popover>

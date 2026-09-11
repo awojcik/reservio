@@ -23,6 +23,10 @@ const notification_1 = require("../domain/notification");
 const notifications_service_1 = require("./notifications.service");
 const OUTBOX_JOB = "outbox";
 const SEND_JOB = "send";
+function jobIdFor(type, bookingId, refId) {
+    const slug = type.toLowerCase().replace(/_/g, "-");
+    return `notify-${slug}-${refId ?? bookingId}`;
+}
 let NotificationWorker = NotificationWorker_1 = class NotificationWorker {
     connection;
     queue;
@@ -51,7 +55,7 @@ let NotificationWorker = NotificationWorker_1 = class NotificationWorker {
             if (job.name === OUTBOX_JOB)
                 return this.pumpOutbox();
             try {
-                return await this.notifications.deliver(job.data.bookingId, job.data.type);
+                return await this.notifications.deliver(job.data.bookingId, job.data.type, job.data.refId ?? null);
             }
             catch (error) {
                 if (error instanceof notification_1.PermanentEmailError) {
@@ -76,7 +80,7 @@ let NotificationWorker = NotificationWorker_1 = class NotificationWorker {
     }
     async pumpOutbox() {
         await this.outbox.recoverStale();
-        const claimed = await this.outbox.claimPending();
+        const claimed = await this.outbox.claimPending(50, ["NOTIFICATION"]);
         let enqueued = 0;
         for (const event of claimed) {
             const type = event.payload.notificationType;
@@ -85,7 +89,7 @@ let NotificationWorker = NotificationWorker_1 = class NotificationWorker {
                 continue;
             }
             try {
-                await this.enqueue(event.payload.bookingId, type);
+                await this.enqueue(event.payload.bookingId, type, event.payload.refId ?? null);
                 await this.outbox.markProcessed(event.id);
                 enqueued += 1;
             }
@@ -95,9 +99,13 @@ let NotificationWorker = NotificationWorker_1 = class NotificationWorker {
         }
         return { enqueued };
     }
-    async enqueue(bookingId, type) {
-        await this.queue.add(SEND_JOB, { bookingId, type }, { jobId: `notify-${type.toLowerCase().replace(/_/g, "-")}-${bookingId}` });
+    async enqueue(bookingId, type, refId = null) {
+        await this.queue.add(SEND_JOB, { bookingId, type, refId: refId ?? undefined }, { jobId: jobIdFor(type, bookingId, refId) });
         this.logger.log({ event: "notification.enqueued", bookingId, type });
+    }
+    async requeue(bookingId, type, refId = null) {
+        await this.queue.remove(jobIdFor(type, bookingId, refId)).catch(() => undefined);
+        await this.enqueue(bookingId, type, refId);
     }
     async onApplicationShutdown() {
         await this.worker?.close();

@@ -12,10 +12,15 @@ import type {
  * reload or a shared link reproduces the exact same request.
  */
 
-/** Demo stay: 12–16 September. Kept constant so server and client agree. */
-export const DEFAULT_CHECK_IN = "2026-09-12";
-export const DEFAULT_CHECK_OUT = "2026-09-16";
-export const DEFAULT_DESTINATION = "Gdańsk";
+/**
+ * A first-time visitor searches for nothing in particular.
+ *
+ * There used to be a demo destination and a demo stay here. They made the
+ * product look alive in a screenshot and lied to every real visitor: somebody
+ * who had never typed anything was shown results for Gdańsk in September, and
+ * the dates they eventually picked replaced values they never chose
+ * (§4).
+ */
 
 export const PROPERTY_TYPES: PropertyType[] = [
   "apartment",
@@ -33,11 +38,11 @@ export const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ];
 
 export const EMPTY_QUERY: SearchQuery = {
-  destination: DEFAULT_DESTINATION,
-  checkIn: DEFAULT_CHECK_IN,
-  checkOut: DEFAULT_CHECK_OUT,
+  destination: "",
+  checkIn: "",
+  checkOut: "",
   adults: 2,
-  children: 2,
+  children: 0,
   propertyTypes: [],
   minBedrooms: 0,
   pool: false,
@@ -54,6 +59,31 @@ export const EMPTY_QUERY: SearchQuery = {
 export const BEACH_RADIUS = 500;
 
 type ParamsLike = Pick<URLSearchParams, "get">;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A stay is both dates or neither.
+ *
+ * Accepting one alone would put an unusable value into every price request and
+ * into the calendar's `parseISO`. A malformed date is treated the same way as
+ * a missing one — a URL somebody hand-edited should degrade to "no dates",
+ * not to an invalid search.
+ */
+function readStay(params: ParamsLike): { checkIn: string; checkOut: string } {
+  const checkIn = params.get("checkIn") ?? "";
+  const checkOut = params.get("checkOut") ?? "";
+
+  const valid =
+    ISO_DATE.test(checkIn) && ISO_DATE.test(checkOut) && checkOut > checkIn;
+
+  return valid ? { checkIn, checkOut } : { checkIn: "", checkOut: "" };
+}
+
+/** True once the query says something worth remembering or repeating. */
+export function hasSearchCriteria(query: SearchQuery): boolean {
+  return Boolean(query.destination.trim()) || Boolean(query.checkIn && query.checkOut);
+}
 
 function num(params: ParamsLike, key: string, fallback: number): number {
   const raw = params.get(key);
@@ -90,11 +120,12 @@ export function parseSearchQuery(params: ParamsLike): SearchQuery {
     : "recommended";
 
   return {
-    destination: params.get("destination") || DEFAULT_DESTINATION,
-    checkIn: params.get("checkIn") || DEFAULT_CHECK_IN,
-    checkOut: params.get("checkOut") || DEFAULT_CHECK_OUT,
+    destination: params.get("destination") ?? "",
+    // A half-entered stay is no stay: one date without the other cannot price
+    // anything and would make every downstream range calculation invalid.
+    ...readStay(params),
     adults: Math.max(1, Math.round(num(params, "adults", 2))),
-    children: Math.max(0, Math.round(num(params, "children", 2))),
+    children: Math.max(0, Math.round(num(params, "children", 0))),
     propertyTypes: list(params, "type").filter((value): value is PropertyType =>
       PROPERTY_TYPES.includes(value as PropertyType),
     ),
@@ -115,11 +146,10 @@ export function buildSearchParams(query: SearchQuery): URLSearchParams {
   const params = new URLSearchParams();
 
   if (query.destination) params.set("destination", query.destination);
-  if (query.checkIn !== DEFAULT_CHECK_IN) params.set("checkIn", query.checkIn);
-  if (query.checkOut !== DEFAULT_CHECK_OUT)
-    params.set("checkOut", query.checkOut);
+  if (query.checkIn) params.set("checkIn", query.checkIn);
+  if (query.checkOut) params.set("checkOut", query.checkOut);
   if (query.adults !== 2) params.set("adults", String(query.adults));
-  if (query.children !== 2) params.set("children", String(query.children));
+  if (query.children !== 0) params.set("children", String(query.children));
   if (query.propertyTypes.length) params.set("type", query.propertyTypes.join(","));
   if (query.minBedrooms) params.set("bedrooms", String(query.minBedrooms));
   if (query.pool) params.set("pool", "true");

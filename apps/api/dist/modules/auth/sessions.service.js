@@ -50,6 +50,7 @@ let SessionsService = class SessionsService {
             lastSeenAt: schema_1.userSessions.lastSeenAt,
             userId: schema_1.users.id,
             email: schema_1.users.email,
+            roles: schema_1.users.roles,
         })
             .from(schema_1.userSessions)
             .innerJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.users.id, schema_1.userSessions.userId))
@@ -65,7 +66,7 @@ let SessionsService = class SessionsService {
                 .set({ lastSeenAt: now })
                 .where((0, drizzle_orm_1.eq)(schema_1.userSessions.id, row.sessionId));
         }
-        return { id: row.userId, email: row.email };
+        return { id: row.userId, email: row.email, roles: (row.roles ?? []) };
     }
     async revoke(token) {
         await this.database.db

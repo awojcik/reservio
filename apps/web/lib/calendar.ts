@@ -1,4 +1,4 @@
-import type { HostCalendarBlock } from "@rezervio/api-client";
+import type { HostAllCalendarEvent, HostCalendarBlock } from "@rezervio/api-client";
 
 /**
  * Calendar-grid helpers. Dates are plain `YYYY-MM-DD` strings throughout, the
@@ -126,4 +126,24 @@ export function isWithinSelection(
 ): boolean {
   if (!selection) return false;
   return selection.startDate <= date && date < selection.endDate;
+}
+
+/** Every day in `[from, to)`, in order — the columns of the unified calendar. */
+export function daysBetween(from: string, to: string): string[] {
+  const days: string[] = [];
+  for (let date = from; date < to; date = addDays(date, 1)) days.push(date);
+  return days;
+}
+
+/** The exclusive end of the month a date falls in. */
+export function endOfMonth(monthStart: string): string {
+  return shiftMonth(startOfMonth(monthStart), 1);
+}
+
+/** Same half-open rule as `blockFor`, for the multi-Property calendar. */
+export function eventFor(
+  date: string,
+  events: HostAllCalendarEvent[],
+): HostAllCalendarEvent | null {
+  return events.find((event) => event.startDate <= date && date < event.endDate) ?? null;
 }

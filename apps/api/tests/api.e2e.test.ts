@@ -12,7 +12,10 @@ beforeAll(async () => {
   process.env.DATABASE_URL ??= "postgresql://rezervio:rezervio@localhost:5432/rezervio";
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+    // `configureApp` installs the raw-body-preserving JSON parser.
+    bodyParser: false,
+  });
   await configureApp(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
@@ -23,11 +26,22 @@ afterAll(async () => {
 });
 
 describe("public endpoints", () => {
-  it("GET /api/health reports the database is reachable", async () => {
+  it("GET /api/health reports liveness without touching a dependency", async () => {
     const response = await app.inject({ method: "GET", url: "/api/health" });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "ok" });
+    expect(response.json()).toMatchObject({ status: "ok", environment: expect.any(String) });
+  });
+
+  it("GET /api/ready reports every dependency", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/ready" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: "ready",
+      database: { status: "up" },
+      redis: { status: "up" },
+    });
   });
 
   it("GET /api/search returns items and a total", async () => {

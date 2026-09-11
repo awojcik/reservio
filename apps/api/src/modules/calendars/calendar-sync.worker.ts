@@ -140,15 +140,37 @@ export class CalendarSyncWorker implements OnModuleInit, OnApplicationShutdown {
   /**
    * Deduplicated by jobId, so a Host leaning on "Sync now" produces one job
    * rather than a queue full of identical work (milestone 03 §38).
+   *
+   * The dedup only covers work that is still *in flight*. BullMQ keeps
+   * completed and failed jobs around, and it treats `add` with a known id as a
+   * no-op — so without the sweep below, the first sync of a calendar would be
+   * its last: every later "Sync now", from the Host panel or from admin
+   * support, would silently do nothing (milestone 11 §10).
    */
-  async enqueue(externalCalendarId: string, manual: boolean): Promise<void> {
-    await this.queue.add(
-      SYNC_JOB,
-      { externalCalendarId, manual },
-      // BullMQ rejects ":" in a custom job id — it is the separator in its own
-      // Redis keys.
-      { jobId: `sync-${externalCalendarId}` },
-    );
+  async enqueue(
+    externalCalendarId: string,
+    manual: boolean,
+  ): Promise<{ queued: boolean; pendingState?: string }> {
+    // BullMQ rejects ":" in a custom job id — it is the separator in its own
+    // Redis keys.
+    const jobId = `sync-${externalCalendarId}`;
+
+    const previous = await this.queue.getJob(jobId);
+    if (previous) {
+      const state = await previous.getState();
+
+      // Waiting, delayed and active work is the dedup case: the same sync is
+      // already coming, and saying so is more useful than pretending to queue
+      // a second one.
+      if (state !== "completed" && state !== "failed") {
+        return { queued: false, pendingState: state };
+      }
+
+      await previous.remove().catch(() => undefined);
+    }
+
+    await this.queue.add(SYNC_JOB, { externalCalendarId, manual }, { jobId });
+    return { queued: true };
   }
 
   async onApplicationShutdown(): Promise<void> {

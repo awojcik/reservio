@@ -30,21 +30,35 @@ export function BookingCard({
 }: BookingCardProps) {
   const price = property.price;
 
+  /*
+   * A visitor can reach a Property without having chosen a stay — the search
+   * form no longer pretends they picked one. The price below is then the
+   * API's indicative one-night quote, and saying so is better than showing
+   * "Invalid Date" over a total (§5).
+   */
+  const stayChosen = Boolean(checkIn && checkOut);
+
   // The Stay travels to the form in the URL, exactly as it arrived here.
-  const bookingHref = `/booking/${property.slug}?${new URLSearchParams({
-    checkIn,
-    checkOut,
+  const bookingParams = new URLSearchParams({
     adults: String(adults),
     children: String(childrenCount),
-  }).toString()}`;
+  });
+  if (stayChosen) {
+    bookingParams.set("checkIn", checkIn);
+    bookingParams.set("checkOut", checkOut);
+  }
+  const bookingHref = `/booking/${property.slug}?${bookingParams.toString()}`;
 
   const unavailable = property.available === false;
 
   return (
     <div className="rounded-[14px] border border-line bg-surface p-5">
-      <p className="text-[16px] font-bold">{formatLongDateRange(checkIn, checkOut)}</p>
+      <p className="text-[16px] font-bold">
+        {stayChosen ? formatLongDateRange(checkIn, checkOut) : "Wybierz termin"}
+      </p>
       <p className="text-[14px] text-muted">
         {formatGuests(adults, childrenCount)} · {formatNights(price.nights)}
+        {stayChosen ? "" : " · cena orientacyjna"}
       </p>
 
       <dl className="mt-5 space-y-2 text-[15px]">
@@ -85,7 +99,17 @@ export function BookingCard({
         </div>
       ) : null}
 
-      {unavailable ? (
+      {!stayChosen ? (
+        /*
+         * Booking needs a real stay: the form creates a Hold over specific
+         * nights. Sending somebody there without dates would give them a
+         * screen they cannot complete, so the missing step is named instead
+         * (§5).
+         */
+        <p className="mt-5 rounded-[10px] border border-line bg-background px-3.5 py-3 text-center text-[14px] font-bold">
+          Wybierz termin, aby zarezerwować
+        </p>
+      ) : unavailable ? (
         <p className="mt-5 rounded-[10px] border border-accent-edge/40 bg-accent/10 px-3.5 py-3 text-center text-[14px] font-bold">
           Ten termin jest zajęty
         </p>

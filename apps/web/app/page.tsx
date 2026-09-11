@@ -6,7 +6,6 @@ import { Header } from "@/components/layout/Header";
 import { Logo } from "@/components/layout/Logo";
 import { formatAmountMinor, formatResultCount } from "@/lib/format";
 import { createServerApiClient } from "@/lib/api-server";
-import { DEFAULT_CHECK_IN, DEFAULT_CHECK_OUT } from "@/lib/search";
 
 const BENEFITS = [
   {
@@ -52,10 +51,14 @@ async function loadDestinationStats(): Promise<DestinationStat[]> {
     DESTINATIONS.map(async (destination) => {
       try {
         const response = await api.searchProperties(
+          /*
+           * No dates: the tile shows how many Properties a destination has and
+           * what the cheapest one starts at, not a quote for a particular
+           * stay. Pinning a demo week here would make those numbers wrong for
+           * every visitor who is not travelling that week (§4).
+           */
           {
             destination: destination.query,
-            checkIn: DEFAULT_CHECK_IN,
-            checkOut: DEFAULT_CHECK_OUT,
             adults: 1,
             children: 0,
             sort: "LOWEST_PRICE",

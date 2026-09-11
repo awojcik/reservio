@@ -32,12 +32,15 @@ let OutboxService = OutboxService_1 = class OutboxService {
             payloadJson: JSON.stringify(event.payload),
         });
     }
-    async claimPending(limit = 50) {
+    async claimPending(limit = 50, types) {
         return this.database.db.transaction(async (tx) => {
             const rows = (await tx.execute((0, drizzle_orm_1.sql) `
         SELECT id, type, aggregate_id, payload_json
         FROM outbox_events
         WHERE status = 'PENDING'
+          ${types && types.length > 0
+                ? (0, drizzle_orm_1.sql) `AND type IN (${drizzle_orm_1.sql.join(types.map((type) => (0, drizzle_orm_1.sql) `${type}`), (0, drizzle_orm_1.sql) `, `)})`
+                : (0, drizzle_orm_1.sql) ``}
         ORDER BY created_at ASC
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED

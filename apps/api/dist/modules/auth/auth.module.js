@@ -30,8 +30,9 @@ exports.AuthModule = AuthModule = __decorate([
             login_rate_limiter_1.LoginRateLimiter,
             auth_guards_1.SessionGuard,
             auth_guards_1.HostGuard,
+            auth_guards_1.AdminGuard,
         ],
-        exports: [sessions_service_1.SessionsService, auth_guards_1.SessionGuard, auth_guards_1.HostGuard, hosts_module_1.HostsModule],
+        exports: [sessions_service_1.SessionsService, auth_guards_1.SessionGuard, auth_guards_1.HostGuard, auth_guards_1.AdminGuard, hosts_module_1.HostsModule, users_module_1.UsersModule],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

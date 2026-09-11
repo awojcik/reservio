@@ -32,7 +32,10 @@ beforeAll(async () => {
   process.env.DATABASE_URL ??= "postgresql://rezervio:rezervio@localhost:5432/rezervio";
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+    // `configureApp` installs the raw-body-preserving JSON parser.
+    bodyParser: false,
+  });
   await configureApp(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();

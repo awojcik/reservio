@@ -6,7 +6,7 @@ import { ApiError, type PropertyDetail } from "@rezervio/api-client";
 import { Header } from "@/components/layout/Header";
 import { PropertyDetailView } from "@/components/property/PropertyDetailView";
 import { createServerApiClient } from "@/lib/api-server";
-import { parseSearchQuery } from "@/lib/search";
+import { EMPTY_QUERY, buildSearchParams, parseSearchQuery } from "@/lib/search";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -64,13 +64,15 @@ export default async function PropertyPage({ params, searchParams }: PageProps) 
 
   const property = await loadProperty(id, query.checkIn, query.checkOut);
 
-  // Going back keeps the same stay selected.
-  const backToSearch = `/search?${new URLSearchParams({
+  // Going back keeps the same stay selected — and, when no stay was chosen,
+  // keeps that too rather than inventing one.
+  const backToSearch = `/search?${buildSearchParams({
+    ...EMPTY_QUERY,
+    destination: property.city,
     checkIn: query.checkIn,
     checkOut: query.checkOut,
-    adults: String(query.adults),
-    children: String(query.children),
-    destination: property.city,
+    adults: query.adults,
+    children: query.children,
   }).toString()}`;
 
   return (

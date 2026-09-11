@@ -15,16 +15,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
+const cookie_options_1 = require("../../infrastructure/security/cookie-options");
+const rate_limit_guard_1 = require("../../infrastructure/security/rate-limit.guard");
+const security_module_1 = require("../../infrastructure/security/security.module");
 const auth_service_1 = require("./auth.service");
 const auth_guards_1 = require("./auth.guards");
+const rate_limit_guard_2 = require("../../infrastructure/security/rate-limit.guard");
 const auth_dto_1 = require("./dto/auth.dto");
 const sessions_service_1 = require("./sessions.service");
 let AuthController = class AuthController {
     auth;
     sessions;
-    constructor(auth, sessions) {
+    environment;
+    constructor(auth, sessions, environment) {
         this.auth = auth;
         this.sessions = sessions;
+        this.environment = environment;
     }
     async register(dto, reply) {
         const { user, token } = await this.auth.register(dto);
@@ -49,18 +55,13 @@ let AuthController = class AuthController {
         return this.auth.describe(user);
     }
     setSessionCookie(reply, token) {
-        reply.setCookie(this.sessions.cookieName, token, {
-            httpOnly: true,
-            sameSite: "lax",
-            path: "/",
-            secure: process.env.NODE_ENV === "production",
-            maxAge: this.sessions.ttlSeconds,
-        });
+        reply.setCookie(this.sessions.cookieName, token, (0, cookie_options_1.cookieOptionsFor)(this.environment.name, this.sessions.ttlSeconds));
     }
 };
 exports.AuthController = AuthController;
 __decorate([
     (0, common_1.Post)("register"),
+    (0, rate_limit_guard_1.RateLimit)({ bucket: "register", limit: 20, windowSeconds: 900, scope: "ip" }),
     (0, swagger_1.ApiOperation)({
         summary: "Rejestracja konta",
         description: "Tworzy User i sesję. Konto jest wspólne: ten sam User może rezerwować jako Guest i — po dodaniu profilu — wystawiać obiekty jako Host.",
@@ -75,6 +76,7 @@ __decorate([
 ], AuthController.prototype, "register", null);
 __decorate([
     (0, common_1.Post)("register/host"),
+    (0, rate_limit_guard_1.RateLimit)({ bucket: "register", limit: 20, windowSeconds: 900, scope: "ip" }),
     (0, swagger_1.ApiOperation)({
         summary: "Rejestracja User wraz z profilem Host",
         description: "Zakłada konto i od razu profil gospodarza. Zwykła rejestracja tworzy sam User — profil Host jest opcjonalny i można go dodać później.",
@@ -90,6 +92,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)("login"),
     (0, common_1.HttpCode)(200),
+    (0, rate_limit_guard_1.RateLimit)({ bucket: "login", limit: 60, windowSeconds: 900, scope: "ip" }),
     (0, swagger_1.ApiOperation)({
         summary: "Logowanie",
         description: "Nie ujawnia, czy adres email istnieje — nieznane konto i błędne hasło dają tę samą odpowiedź.",
@@ -133,8 +136,10 @@ __decorate([
 ], AuthController.prototype, "me", null);
 exports.AuthController = AuthController = __decorate([
     (0, swagger_1.ApiTags)("auth"),
+    (0, common_1.UseGuards)(rate_limit_guard_2.RateLimitGuard),
     (0, common_1.Controller)("auth"),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
-        sessions_service_1.SessionsService])
+        sessions_service_1.SessionsService,
+        security_module_1.AppEnvironmentService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

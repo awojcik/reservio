@@ -49,10 +49,28 @@ export function HostHeader({ displayName }: { displayName: string }) {
               Obiekty
             </Link>
             <Link
+              href="/host/calendar"
+              className="rounded-[10px] px-3 py-2 text-[14px] font-bold text-surface/75 transition-colors hover:bg-surface/10 hover:text-surface"
+            >
+              Kalendarz
+            </Link>
+            <Link
               href="/host/bookings"
               className="rounded-[10px] px-3 py-2 text-[14px] font-bold text-surface/75 transition-colors hover:bg-surface/10 hover:text-surface"
             >
               Rezerwacje
+            </Link>
+            <Link
+              href="/host/payments"
+              className="rounded-[10px] px-3 py-2 text-[14px] font-bold text-surface/75 transition-colors hover:bg-surface/10 hover:text-surface"
+            >
+              Płatności
+            </Link>
+            <Link
+              href="/host/integrations"
+              className="rounded-[10px] px-3 py-2 text-[14px] font-bold text-surface/75 transition-colors hover:bg-surface/10 hover:text-surface"
+            >
+              Integracje
             </Link>
           </nav>
         </div>

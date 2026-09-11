@@ -14,8 +14,10 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingsController = void 0;
 const common_1 = require("@nestjs/common");
-const config_1 = require("@nestjs/config");
 const swagger_1 = require("@nestjs/swagger");
+const cookie_options_1 = require("../../infrastructure/security/cookie-options");
+const rate_limit_guard_1 = require("../../infrastructure/security/rate-limit.guard");
+const security_module_1 = require("../../infrastructure/security/security.module");
 const account_service_1 = require("../account/account.service");
 const hosts_service_1 = require("../hosts/hosts.service");
 const sessions_service_1 = require("../auth/sessions.service");
@@ -24,11 +26,10 @@ const booking_lifecycle_worker_1 = require("./booking-lifecycle.worker");
 const bookings_service_1 = require("./bookings.service");
 const guest_access_service_1 = require("./guest-access.service");
 const idempotency_service_1 = require("./idempotency.service");
+const payment_read_service_1 = require("../payments/payment-read.service");
 const booking_mapper_1 = require("./booking-mapper");
 const booking_dto_1 = require("./dto/booking.dto");
 const IDEMPOTENCY_SCOPE = "bookings.create";
-const GUEST_COOKIE = "rezervio_booking_access";
-const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 let BookingsController = class BookingsController {
     bookings;
     idempotency;
@@ -38,8 +39,9 @@ let BookingsController = class BookingsController {
     sessions;
     hosts;
     account;
-    config;
-    constructor(bookings, idempotency, holds, lifecycle, guestAccess, sessions, hosts, account, config) {
+    paymentState;
+    environment;
+    constructor(bookings, idempotency, holds, lifecycle, guestAccess, sessions, hosts, account, paymentState, environment) {
         this.bookings = bookings;
         this.idempotency = idempotency;
         this.holds = holds;
@@ -48,7 +50,8 @@ let BookingsController = class BookingsController {
         this.sessions = sessions;
         this.hosts = hosts;
         this.account = account;
-        this.config = config;
+        this.paymentState = paymentState;
+        this.environment = environment;
     }
     async optionalUser(request) {
         const token = request.cookies?.[this.sessions.cookieName];
@@ -108,8 +111,7 @@ let BookingsController = class BookingsController {
         if (!currentUser) {
             throw new common_1.UnauthorizedException("Zaloguj się, aby zapisać tę podróż na koncie.");
         }
-        const query = (request.query ?? {});
-        const guestToken = query.token ?? request.cookies?.[GUEST_COOKIE];
+        const guestToken = (0, guest_access_service_1.guestTokenFrom)(request);
         if (!guestToken) {
             throw new common_1.UnauthorizedException("Otwórz rezerwację linkiem z wiadomości email.");
         }
@@ -126,17 +128,10 @@ let BookingsController = class BookingsController {
         return this.render(bookingId);
     }
     setGuestCookie(reply, token) {
-        reply.setCookie(GUEST_COOKIE, token, {
-            httpOnly: true,
-            sameSite: "lax",
-            path: "/",
-            secure: this.config.get("NODE_ENV") === "production",
-            maxAge: GUEST_COOKIE_MAX_AGE,
-        });
+        reply.setCookie(guest_access_service_1.GUEST_COOKIE, token, (0, cookie_options_1.cookieOptionsFor)(this.environment.name, guest_access_service_1.GUEST_COOKIE_MAX_AGE));
     }
     async requireGuestAccess(reference, request) {
-        const query = (request.query ?? {});
-        const token = query.token ?? request.cookies?.[GUEST_COOKIE];
+        const token = (0, guest_access_service_1.guestTokenFrom)(request);
         if (!token) {
             throw new common_1.UnauthorizedException("Otwórz rezerwację linkiem z wiadomości email.");
         }
@@ -145,8 +140,11 @@ let BookingsController = class BookingsController {
     async render(bookingId) {
         const booking = await this.bookings.findByIdInternal(bookingId);
         const { holdExpiresAt } = await this.bookings.findByReference(booking.publicReference);
-        const events = await this.bookings.timelineFor(bookingId);
-        return (0, booking_mapper_1.toBookingDto)(booking, holdExpiresAt, events);
+        const [events, payment] = await Promise.all([
+            this.bookings.timelineFor(bookingId),
+            this.paymentState.forBooking(bookingId),
+        ]);
+        return (0, booking_mapper_1.toBookingDto)(booking, holdExpiresAt, events, payment);
     }
 };
 exports.BookingsController = BookingsController;
@@ -174,6 +172,13 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], BookingsController.prototype, "create", null);
 __decorate([
+    (0, rate_limit_guard_1.RateLimit)({
+        bucket: "guest-access",
+        limit: 20,
+        windowSeconds: 300,
+        scope: "route-param",
+        param: "reference",
+    }),
     (0, common_1.Post)(":reference/access"),
     (0, common_1.HttpCode)(200),
     (0, swagger_1.ApiOperation)({
@@ -239,6 +244,7 @@ __decorate([
 ], BookingsController.prototype, "cancel", null);
 exports.BookingsController = BookingsController = __decorate([
     (0, swagger_1.ApiTags)("bookings"),
+    (0, common_1.UseGuards)(rate_limit_guard_1.RateLimitGuard),
     (0, common_1.Controller)("bookings"),
     __metadata("design:paramtypes", [bookings_service_1.BookingsService,
         idempotency_service_1.IdempotencyService,
@@ -248,6 +254,7 @@ exports.BookingsController = BookingsController = __decorate([
         sessions_service_1.SessionsService,
         hosts_service_1.HostsService,
         account_service_1.AccountService,
-        config_1.ConfigService])
+        payment_read_service_1.PaymentReadService,
+        security_module_1.AppEnvironmentService])
 ], BookingsController);
 //# sourceMappingURL=bookings.controller.js.map

@@ -9,8 +9,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HostBookingsQueryDto = exports.GuestAccessDto = exports.HostBookingDto = exports.BookingDto = exports.BookingActionsDto = exports.BookingTimelineEntryDto = exports.BookingPriceDto = exports.CreateBookingDto = exports.GuestDetailsDto = void 0;
+exports.HostBookingsPageDto = exports.HostBookingsQueryDto = exports.HOST_BOOKING_SORTS = exports.GuestAccessDto = exports.HostBookingDto = exports.BookingDto = exports.BookingActionsDto = exports.BookingTimelineEntryDto = exports.BookingPriceDto = exports.CreateBookingDto = exports.GuestDetailsDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
+const payment_dto_1 = require("../../payments/dto/payment.dto");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 const schema_1 = require("../../../infrastructure/database/schema");
@@ -151,6 +152,7 @@ __decorate([
 class BookingActionsDto {
     canCancel;
     claimed;
+    canPay;
 }
 exports.BookingActionsDto = BookingActionsDto;
 __decorate([
@@ -167,6 +169,13 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], BookingActionsDto.prototype, "claimed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: true,
+        description: "Czy można rozpocząć albo ponowić płatność. Wymaga aktywnej blokady terminu — po jej wygaśnięciu ponowienie nie jest możliwe.",
+    }),
+    __metadata("design:type", Boolean)
+], BookingActionsDto.prototype, "canPay", void 0);
 class BookingDto {
     reference;
     status;
@@ -183,6 +192,7 @@ class BookingDto {
     createdAt;
     timeline;
     allowedActions;
+    payment;
 }
 exports.BookingDto = BookingDto;
 __decorate([
@@ -260,6 +270,14 @@ __decorate([
     (0, swagger_1.ApiProperty)({ type: BookingActionsDto }),
     __metadata("design:type", BookingActionsDto)
 ], BookingDto.prototype, "allowedActions", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        type: payment_dto_1.PaymentStateDto,
+        nullable: true,
+        description: "Stan płatności; null, dopóki płatność nie została rozpoczęta",
+    }),
+    __metadata("design:type", Object)
+], BookingDto.prototype, "payment", void 0);
 class HostBookingDto extends BookingDto {
     id;
     propertyId;
@@ -303,9 +321,22 @@ __decorate([
     (0, class_validator_1.MaxLength)(500),
     __metadata("design:type", String)
 ], GuestAccessDto.prototype, "token", void 0);
+exports.HOST_BOOKING_SORTS = [
+    "NEWEST",
+    "STAY_DATE_ASC",
+    "STAY_DATE_DESC",
+    "ACTION_REQUIRED",
+];
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 class HostBookingsQueryDto {
     status;
     propertyId;
+    search;
+    from;
+    to;
+    sort;
+    limit;
+    offset;
 }
 exports.HostBookingsQueryDto = HostBookingsQueryDto;
 __decorate([
@@ -320,4 +351,68 @@ __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], HostBookingsQueryDto.prototype, "propertyId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        example: "RZV-7KD2M9QP",
+        description: "Szuka po numerze rezerwacji, imieniu gościa albo adresie email",
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => (typeof value === "string" ? value.trim() : value)),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(120),
+    __metadata("design:type", String)
+], HostBookingsQueryDto.prototype, "search", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: "2026-09-01", description: "Pobyty kończące się od tej daty" }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Matches)(DATE_ONLY, { message: "from musi mieć format YYYY-MM-DD" }),
+    __metadata("design:type", String)
+], HostBookingsQueryDto.prototype, "from", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: "2026-10-01", description: "Pobyty zaczynające się przed tą datą" }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Matches)(DATE_ONLY, { message: "to musi mieć format YYYY-MM-DD" }),
+    __metadata("design:type", String)
+], HostBookingsQueryDto.prototype, "to", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: exports.HOST_BOOKING_SORTS, default: "NEWEST" }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(exports.HOST_BOOKING_SORTS),
+    __metadata("design:type", String)
+], HostBookingsQueryDto.prototype, "sort", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 20, default: 20, maximum: 100 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(100),
+    __metadata("design:type", Number)
+], HostBookingsQueryDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ example: 0, default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], HostBookingsQueryDto.prototype, "offset", void 0);
+class HostBookingsPageDto {
+    items;
+    total;
+    hasMore;
+}
+exports.HostBookingsPageDto = HostBookingsPageDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: [HostBookingDto] }),
+    __metadata("design:type", Array)
+], HostBookingsPageDto.prototype, "items", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 42, description: "Liczba wszystkich pasujących rezerwacji" }),
+    __metadata("design:type", Number)
+], HostBookingsPageDto.prototype, "total", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true }),
+    __metadata("design:type", Boolean)
+], HostBookingsPageDto.prototype, "hasMore", void 0);
 //# sourceMappingURL=booking.dto.js.map

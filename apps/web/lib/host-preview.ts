@@ -54,6 +54,11 @@ export function toPreviewDetail(property: HostProperty): PropertyDetail {
     // to be available for.
     available: null,
     bookingMode: property.bookingMode as "REQUEST_TO_BOOK",
+    // The preview shows the public defaults; the real values are configured
+    // under "Informacje dla gościa" and only reach the live page.
+    checkInTime: "15:00",
+    checkOutTime: "11:00",
+    houseRules: null,
     price: {
       nights,
       accommodationAmountMinor: accommodation,

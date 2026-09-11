@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { and, desc, eq, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql, type SQL } from "drizzle-orm";
+
+import { toDate, toDateOrNull } from "../../common/pg-values";
 
 import { DATABASE } from "../../infrastructure/database/database.module";
 import type { Database, Executor } from "../../infrastructure/database/connection";
@@ -37,6 +39,7 @@ import {
   AvailabilityService,
 } from "../availability/availability.service";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/object-storage";
+import { StayScheduleCanceller } from "../stay/stay-schedule.canceller";
 
 /** Raised when a Host tries to answer a request whose deadline has passed. */
 export class BookingRequestExpiredError extends ConflictException {
@@ -104,6 +107,7 @@ export class BookingsService {
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     private readonly outbox: OutboxService,
     private readonly guestAccess: GuestAccessService,
+    private readonly stayJobs: StayScheduleCanceller,
     private readonly config: ConfigService,
   ) {}
 
@@ -153,6 +157,56 @@ export class BookingsService {
       aggregateId: bookingId,
       payload: { bookingId, notificationType: type },
     });
+  }
+
+  /**
+   * Appends to the Booking timeline from another module.
+   *
+   * Payments live in their own module but write to the same trail: "paid",
+   * "confirmed" and "refunded" belong in the history a Guest and a Host read,
+   * next to "requested" and "accepted".
+   */
+  async recordPaymentEvent(
+    bookingId: string,
+    type: BookingEventType,
+    metadata: Record<string, string | number | null> | null,
+    executor: Executor = this.database.db,
+  ): Promise<void> {
+    await this.recordEvent(executor, bookingId, type, "SYSTEM", null, metadata ?? undefined);
+  }
+
+  /**
+   * Records a non-notification intent on the Booking, in the caller's
+   * transaction.
+   *
+   * Used by connectivity: "this confirmed Booking must be announced to the
+   * systems its Property is connected to" is exactly the kind of follow-up the
+   * outbox exists for — it must survive a crash right after the commit, and it
+   * must not make the commit wait on a third party (milestone 12 §14).
+   */
+  async recordOutboxIntent(
+    executor: Executor,
+    bookingId: string,
+    type: "EXTERNAL_RESERVATION_PUSH" | "EXTERNAL_RESERVATION_CANCEL",
+  ): Promise<void> {
+    await this.outbox.record(executor, {
+      type,
+      aggregateType: "booking",
+      aggregateId: bookingId,
+      payload: { bookingId },
+    });
+  }
+
+  /**
+   * Queues a Booking notification from another module. Pass the caller's
+   * transaction so the intent commits with the state change it describes.
+   */
+  async notifyBooking(
+    bookingId: string,
+    type: NotificationType,
+    executor: Executor = this.database.db,
+  ): Promise<void> {
+    await this.notify(executor, bookingId, type);
   }
 
   /**
@@ -639,6 +693,20 @@ export class BookingsService {
         actor === "GUEST" ? "BOOKING_CANCELLED_BY_GUEST" : "BOOKING_CANCELLED_BY_HOST",
       );
 
+      /*
+       * And so are the connected systems, through the same outbox. A Booking
+       * that was pushed to a PMS and then cancelled must not go on blocking
+       * dates there; one that was never pushed simply has nothing to cancel,
+       * which the worker discovers rather than this transaction
+       * (milestone 12 §15).
+       */
+      await this.outbox.record(tx, {
+        type: "EXTERNAL_RESERVATION_CANCEL",
+        aggregateType: "booking",
+        aggregateId: booking.id,
+        payload: { bookingId: booking.id },
+      });
+
       this.logger.log({
         event: actor === "GUEST" ? "booking.cancelled.guest" : "booking.cancelled.host",
         bookingId: booking.id,
@@ -646,7 +714,14 @@ export class BookingsService {
       });
 
       return updated;
-    });
+    })
+      .then(async (updated) => {
+        // After the commit: the Stay is not happening, so its scheduled
+        // reminders should not be sitting in the queue. Best effort — every
+        // stay job re-checks the Booking status anyway (milestone 09 §22).
+        await this.stayJobs.cancelFor(bookingId);
+        return updated;
+      });
   }
 
   /** First photo of the Property at booking time, or null when it has none. */
@@ -746,19 +821,83 @@ export class BookingsService {
     return { booking, holdExpiresAt: hold?.expiresAt ?? null };
   }
 
+  /**
+   * The Host's Bookings, filtered and searched.
+   *
+   * Every branch keeps `host_id = :hostId` in the WHERE clause, so no filter
+   * combination can widen the result past what this Host owns
+   * (milestone 07 §22, §28).
+   */
   async listForHost(
     hostId: string,
-    filters: { status?: string; propertyId?: string },
-  ): Promise<BookingRow[]> {
-    const conditions = [eq(bookings.hostId, hostId)];
-    if (filters.status) conditions.push(eq(bookings.status, filters.status));
-    if (filters.propertyId) conditions.push(eq(bookings.propertyId, filters.propertyId));
+    filters: {
+      status?: string;
+      propertyId?: string;
+      search?: string;
+      from?: string;
+      to?: string;
+      sort?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{ items: BookingRow[]; total: number }> {
+    const limit = filters.limit ?? 20;
+    const offset = filters.offset ?? 0;
 
-    return this.database.db
-      .select()
-      .from(bookings)
-      .where(and(...conditions))
-      .orderBy(desc(bookings.createdAt));
+    const conditions: SQL[] = [sql`b.host_id = ${hostId}`];
+
+    if (filters.status) conditions.push(sql`b.status = ${filters.status}`);
+    if (filters.propertyId) conditions.push(sql`b.property_id = ${filters.propertyId}`);
+
+    // Overlap, not containment: a Stay straddling the window still matters.
+    if (filters.from) conditions.push(sql`b.check_out > ${filters.from}::date`);
+    if (filters.to) conditions.push(sql`b.check_in < ${filters.to}::date`);
+
+    if (filters.search) {
+      const pattern = `%${filters.search.toLowerCase()}%`;
+      conditions.push(sql`(
+        lower(b.public_reference) LIKE ${pattern}
+        OR lower(b.guest_name) LIKE ${pattern}
+        OR lower(b.guest_email) LIKE ${pattern}
+      )`);
+    }
+
+    const where = sql.join(conditions, sql` AND `);
+
+    const rows = (await this.database.db.execute(sql`
+      SELECT b.*, count(*) OVER () AS total_count
+      FROM bookings b
+      WHERE ${where}
+      ORDER BY ${this.bookingOrder(filters.sort ?? "NEWEST")}
+      LIMIT ${limit} OFFSET ${offset}
+    `)) as unknown as (Record<string, unknown> & { total_count: string | number })[];
+
+    return {
+      items: rows.map(toBookingRow),
+      total: rows.length > 0 ? Number(rows[0].total_count) : 0,
+    };
+  }
+
+  private bookingOrder(sort: string): SQL {
+    switch (sort) {
+      case "STAY_DATE_ASC":
+        return sql`b.check_in ASC, b.created_at DESC`;
+      case "STAY_DATE_DESC":
+        return sql`b.check_in DESC, b.created_at DESC`;
+      case "ACTION_REQUIRED":
+        // Requests awaiting a decision first, soonest deadline at the top.
+        return sql`
+          CASE b.status
+            WHEN 'PENDING_HOST_APPROVAL' THEN 0
+            WHEN 'PENDING_PAYMENT' THEN 1
+            ELSE 2
+          END ASC,
+          b.host_response_deadline_at ASC NULLS LAST,
+          b.created_at DESC
+        `;
+      default:
+        return sql`b.created_at DESC`;
+    }
   }
 
   async findForHost(hostId: string, bookingId: string): Promise<BookingWithHold> {
@@ -773,6 +912,50 @@ export class BookingsService {
       .limit(1);
 
     return { booking, holdExpiresAt: hold?.expiresAt ?? null };
+  }
+
+  /**
+   * Confirmed Bookings of a Property whose Stay has not finished yet.
+   *
+   * Used when a Host edits the check-in time or a notification offset: the
+   * already-scheduled jobs describe the old configuration and have to be
+   * rebuilt (milestone 09 §22).
+   */
+  async upcomingConfirmedIds(propertyId: string): Promise<string[]> {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const rows = await this.database.db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.propertyId, propertyId),
+          eq(bookings.status, "CONFIRMED"),
+          gte(bookings.checkOut, today),
+        ),
+      );
+
+    return rows.map((row) => row.id);
+  }
+
+  /**
+   * Active holds for many Bookings at once — the list view would otherwise
+   * fire one query per row (milestone 07 §21).
+   */
+  async activeHoldsFor(bookingIds: string[]): Promise<Map<string, Date>> {
+    if (bookingIds.length === 0) return new Map();
+
+    const rows = await this.database.db
+      .select({ bookingId: bookingHolds.bookingId, expiresAt: bookingHolds.expiresAt })
+      .from(bookingHolds)
+      .where(
+        and(
+          inArray(bookingHolds.bookingId, bookingIds),
+          eq(bookingHolds.status, "ACTIVE"),
+        ),
+      );
+
+    return new Map(rows.map((row) => [row.bookingId, row.expiresAt]));
   }
 
   /** Also used by the worker to find the hold it must schedule expiry for. */
@@ -845,4 +1028,46 @@ export class BookingsService {
     if (!booking) throw new NotFoundException("Nie znaleziono rezerwacji.");
     return booking;
   }
+}
+
+/**
+ * `execute` returns snake_case rows, so a raw query needs mapping back onto
+ * the shape the rest of the code expects.
+ */
+function toBookingRow(row: Record<string, unknown>): BookingRow {
+  return {
+    id: row.id as string,
+    publicReference: row.public_reference as string,
+    propertyId: row.property_id as string,
+    hostId: row.host_id as string,
+    bookingMode: row.booking_mode as string,
+    status: row.status as string,
+    statusReason: (row.status_reason ?? null) as string | null,
+    checkIn: row.check_in as string,
+    checkOut: row.check_out as string,
+    adults: row.adults as number,
+    children: row.children as number,
+    guestUserId: (row.guest_user_id ?? null) as string | null,
+    guestName: row.guest_name as string,
+    guestEmail: row.guest_email as string,
+    guestPhone: (row.guest_phone ?? null) as string | null,
+    propertyTitleSnapshot: row.property_title_snapshot as string,
+    propertyCitySnapshot: (row.property_city_snapshot ?? null) as string | null,
+    coverImageUrlSnapshot: (row.cover_image_url_snapshot ?? null) as string | null,
+    accommodationAmountMinor: row.accommodation_amount_minor as number,
+    cleaningFeeAmountMinor: row.cleaning_fee_amount_minor as number,
+    serviceFeeAmountMinor: row.service_fee_amount_minor as number,
+    taxAmountMinor: row.tax_amount_minor as number,
+    discountAmountMinor: row.discount_amount_minor as number,
+    totalAmountMinor: row.total_amount_minor as number,
+    currency: row.currency as string,
+    hostResponseDeadlineAt: toDateOrNull(row.host_response_deadline_at),
+    createdAt: toDate(row.created_at),
+    updatedAt: toDate(row.updated_at),
+    hostRespondedAt: toDateOrNull(row.host_responded_at),
+    cancelledAt: toDateOrNull(row.cancelled_at),
+    expiredAt: toDateOrNull(row.expired_at),
+    confirmedAt: toDateOrNull(row.confirmed_at),
+    sensitiveAccessRevealedAt: toDateOrNull(row.sensitive_access_revealed_at),
+  };
 }

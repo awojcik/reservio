@@ -19,22 +19,29 @@ import {
 } from "@nestjs/swagger";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import { cookieOptionsFor } from "../../infrastructure/security/cookie-options";
+import { RateLimit } from "../../infrastructure/security/rate-limit.guard";
+import { AppEnvironmentService } from "../../infrastructure/security/security.module";
 import { AuthService } from "./auth.service";
 import { CurrentUser, SessionGuard } from "./auth.guards";
+import { RateLimitGuard } from "../../infrastructure/security/rate-limit.guard";
 import { AuthSessionDto, LoginDto, RegisterDto, RegisterHostDto } from "./dto/auth.dto";
 import { SessionsService, type SessionUser } from "./sessions.service";
 
 type CookieRequest = FastifyRequest & { cookies?: Record<string, string | undefined> };
 
 @ApiTags("auth")
+@UseGuards(RateLimitGuard)
 @Controller("auth")
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionsService,
+    private readonly environment: AppEnvironmentService,
   ) {}
 
   @Post("register")
+  @RateLimit({ bucket: "register", limit: 20, windowSeconds: 900, scope: "ip" })
   @ApiOperation({
     summary: "Rejestracja konta",
     description:
@@ -52,6 +59,7 @@ export class AuthController {
   }
 
   @Post("register/host")
+  @RateLimit({ bucket: "register", limit: 20, windowSeconds: 900, scope: "ip" })
   @ApiOperation({
     summary: "Rejestracja User wraz z profilem Host",
     description:
@@ -70,6 +78,12 @@ export class AuthController {
 
   @Post("login")
   @HttpCode(200)
+  /*
+   * A coarse per-address ceiling on top of the per-identifier limiter inside
+   * AuthService: one is about a targeted account, the other about a host
+   * spraying many accounts, and neither catches the other (milestone 11 §21).
+   */
+  @RateLimit({ bucket: "login", limit: 60, windowSeconds: 900, scope: "ip" })
   @ApiOperation({
     summary: "Logowanie",
     description:
@@ -115,13 +129,10 @@ export class AuthController {
   }
 
   private setSessionCookie(reply: FastifyReply, token: string): void {
-    reply.setCookie(this.sessions.cookieName, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      // Plain HTTP on localhost would silently drop a Secure cookie.
-      secure: process.env.NODE_ENV === "production",
-      maxAge: this.sessions.ttlSeconds,
-    });
+    reply.setCookie(
+      this.sessions.cookieName,
+      token,
+      cookieOptionsFor(this.environment.name, this.sessions.ttlSeconds),
+    );
   }
 }

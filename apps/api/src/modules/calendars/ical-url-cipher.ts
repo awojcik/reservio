@@ -1,48 +1,26 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-
 import { Injectable, type OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+
+import { AeadCipher, CipherMisconfigured } from "../../common/aead-cipher";
 
 /**
  * An iCal import URL usually carries a bearer token in its path, so it is a
  * credential and is encrypted at rest (milestone 03 §19–§20).
  *
- * AES-256-GCM: authenticated, so a tampered ciphertext fails loudly instead of
- * decrypting to garbage that would then be fetched.
+ * The crypto itself lives in `AeadCipher`; this class is the key it uses and
+ * the masking rule for showing a Host which feed is which.
  */
-const ALGORITHM = "aes-256-gcm";
-const KEY_BYTES = 32;
-const IV_BYTES = 12;
-const TAG_BYTES = 16;
-/** Prefix so a future key rotation can tell formats apart. */
-const VERSION = "v1";
-
-export class IcalUrlCipherMisconfigured extends Error {}
+export { CipherMisconfigured as IcalUrlCipherMisconfigured };
 
 @Injectable()
 export class IcalUrlCipher implements OnModuleInit {
-  private readonly key: Buffer | null;
-  private readonly configError: string | null;
+  private readonly cipher: AeadCipher;
 
   constructor(config: ConfigService) {
-    const raw = config.get<string>("ICAL_URL_ENCRYPTION_KEY")?.trim();
-
-    if (!raw) {
-      this.key = null;
-      this.configError =
-        "ICAL_URL_ENCRYPTION_KEY nie jest ustawiony. Wygeneruj: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"";
-      return;
-    }
-
-    const decoded = Buffer.from(raw, "base64");
-    if (decoded.length !== KEY_BYTES) {
-      this.key = null;
-      this.configError = `ICAL_URL_ENCRYPTION_KEY musi mieć ${KEY_BYTES} bajtów po zdekodowaniu base64 (ma ${decoded.length}).`;
-      return;
-    }
-
-    this.key = decoded;
-    this.configError = null;
+    this.cipher = new AeadCipher(
+      config.get<string>("ICAL_URL_ENCRYPTION_KEY"),
+      "ICAL_URL_ENCRYPTION_KEY",
+    );
   }
 
   /**
@@ -51,38 +29,15 @@ export class IcalUrlCipher implements OnModuleInit {
    * nobody is watching.
    */
   onModuleInit(): void {
-    if (this.configError) throw new IcalUrlCipherMisconfigured(this.configError);
+    if (this.cipher.configError) throw new CipherMisconfigured(this.cipher.configError);
   }
 
   encrypt(plaintext: string): string {
-    const key = this.requireKey();
-    const iv = randomBytes(IV_BYTES);
-    const cipher = createCipheriv(ALGORITHM, key, iv);
-
-    const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    const tag = cipher.getAuthTag();
-
-    return `${VERSION}.${Buffer.concat([iv, tag, ciphertext]).toString("base64")}`;
+    return this.cipher.encrypt(plaintext);
   }
 
   decrypt(payload: string): string {
-    const key = this.requireKey();
-
-    const [version, encoded] = payload.split(".", 2);
-    if (version !== VERSION || !encoded) {
-      throw new IcalUrlCipherMisconfigured("Nieznany format zaszyfrowanego URL.");
-    }
-
-    const buffer = Buffer.from(encoded, "base64");
-    const iv = buffer.subarray(0, IV_BYTES);
-    const tag = buffer.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
-    const ciphertext = buffer.subarray(IV_BYTES + TAG_BYTES);
-
-    const decipher = createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-
-    // Throws on a wrong key or a tampered payload — which is the point.
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+    return this.cipher.decrypt(payload);
   }
 
   /**
@@ -98,10 +53,5 @@ export class IcalUrlCipher implements OnModuleInit {
     } catch {
       return "…";
     }
-  }
-
-  private requireKey(): Buffer {
-    if (!this.key) throw new IcalUrlCipherMisconfigured(this.configError ?? "Brak klucza.");
-    return this.key;
   }
 }

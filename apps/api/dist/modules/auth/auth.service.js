@@ -88,17 +88,18 @@ let AuthService = AuthService_1 = class AuthService {
     }
     async login(dto, clientKey) {
         const email = (0, users_service_1.normaliseEmail)(dto.email);
-        if (!this.rateLimiter.consume(`${clientKey}:${email}`)) {
-            this.logger.warn({ event: "auth.login.rate_limited", email });
+        if (this.rateLimiter.blocked(email, clientKey)) {
+            this.logger.warn({ event: "auth.login.rate_limited" });
             throw new common_1.UnauthorizedException(INVALID_CREDENTIALS);
         }
         const user = await this.users.findByEmail(email);
         const valid = await this.passwords.verifyOrDummy(user?.passwordHash ?? null, dto.password);
         if (!user || !valid) {
-            this.logger.warn({ event: "auth.login.failed", email });
+            this.rateLimiter.recordFailure(email, clientKey);
+            this.logger.warn({ event: "auth.login.failed" });
             throw new common_1.UnauthorizedException(INVALID_CREDENTIALS);
         }
-        this.rateLimiter.reset(`${clientKey}:${email}`);
+        this.rateLimiter.reset(email);
         const host = await this.hosts.findByUserId(user.id);
         const token = await this.sessions.create(user.id);
         this.logger.log({ event: "auth.login.succeeded", userId: user.id });

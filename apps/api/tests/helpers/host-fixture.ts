@@ -1,20 +1,29 @@
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
 import { Test } from "@nestjs/testing";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 
 import { AppModule } from "../../src/app.module";
 import {
   EMAIL_PROVIDER,
   type EmailProvider,
 } from "../../src/modules/notifications/infrastructure/email-provider";
+import {
+  PAYMENT_PROVIDER,
+  type PaymentProvider,
+} from "../../src/modules/payments/domain/payment-provider";
+import { HostawayInventoryProvider } from "../../src/modules/connectivity/infrastructure/hostaway.provider";
+import type { InventoryProvider } from "../../src/modules/connectivity/domain/inventory-provider";
 import { configureApp } from "../../src/bootstrap";
 import { DATABASE } from "../../src/infrastructure/database/database.module";
 import type { Database } from "../../src/infrastructure/database/connection";
 import {
+  adminActions,
+  externalInventoryConnections,
   hosts,
   properties,
   propertyImages,
   users,
+  type UserRole,
 } from "../../src/infrastructure/database/schema";
 
 export type TestHost = {
@@ -30,6 +39,14 @@ export const TEST_PASSWORD = "test-haslo-integracyjne";
 export type TestAppOptions = {
   /** Swaps SMTP for a double, so no test ever needs a mail server. */
   emailProvider?: EmailProvider;
+  /** Swaps the PSP for a double, so no test ever needs a live sandbox. */
+  paymentProvider?: PaymentProvider;
+  /**
+   * Swaps the PMS for a double. Rezervio has no Hostaway account, so this is
+   * how everything below the network boundary is exercised in full
+   * (milestone 12 §33).
+   */
+  inventoryProvider?: InventoryProvider;
 };
 
 export async function createTestApp(
@@ -48,25 +65,94 @@ export async function createTestApp(
   process.env.DISABLE_CALENDAR_WORKER = "true";
   process.env.DISABLE_BOOKING_WORKER = "true";
   process.env.DISABLE_NOTIFICATION_WORKER = "true";
+  // Refunds and provider cancels are driven explicitly by the payment tests.
+  process.env.DISABLE_PAYMENT_WORKER = "true";
+  // Stay reminders and the completion job are driven explicitly by the tests.
+  process.env.DISABLE_STAY_WORKER = "true";
+  // Settlement release and transfer are driven explicitly by the tests.
+  process.env.DISABLE_SETTLEMENT_WORKER = "true";
+  // Provider syncs and outbound pushes are driven explicitly by the tests.
+  process.env.DISABLE_EXTERNAL_WORKER = "true";
+  // No waiting for a real clock: the release policy is exercised by moving
+  // `release_at`, not by sleeping (milestone 10 §3).
+  process.env.HOST_SETTLEMENT_RELEASE_DELAY_HOURS ??= "24";
   process.env.APP_BASE_URL = "http://localhost:3000";
   // Mock feeds are served from 127.0.0.1, which SSRF protection blocks by
   // design; the development escape hatch is what makes them reachable.
   process.env.ICAL_ALLOW_PRIVATE_HOSTS = "true";
   // A namespace of its own, so a dev server running against the same Redis
-  // neither steals these jobs nor receives them.
+  // neither steals these jobs nor receives them. The rate-limit counters share
+  // this prefix, so they are namespaced with everything else.
   process.env.BULLMQ_PREFIX = "rezervio-test";
+  /*
+   * Registration is the one limited endpoint keyed by address alone, and the
+   * whole suite registers from 127.0.0.1. Every other bucket is keyed by the
+   * Booking, the calendar or the account under test, so it isolates itself.
+   * The login and admin-search limits are left at their production values —
+   * the security tests assert on them (milestone 11 §44).
+   */
+  process.env.RATE_LIMIT_REGISTER_MAX ??= "10000";
+  /*
+   * Connecting an integration is keyed per operator, and the connectivity
+   * suite reuses one Host across every case. The manual-sync bucket is left at
+   * its production value — a test asserts on it (milestone 12 §24).
+   */
+  process.env.RATE_LIMIT_INTEGRATION_CONNECT_MAX ??= "10000";
 
   const builder = Test.createTestingModule({ imports: [AppModule] });
   if (options.emailProvider) {
     builder.overrideProvider(EMAIL_PROVIDER).useValue(options.emailProvider);
   }
+  if (options.paymentProvider) {
+    builder.overrideProvider(PAYMENT_PROVIDER).useValue(options.paymentProvider);
+  }
+  if (options.inventoryProvider) {
+    builder.overrideProvider(HostawayInventoryProvider).useValue(options.inventoryProvider);
+  }
 
   const moduleRef = await builder.compile();
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(
+    new FastifyAdapter(),
+    // Same as production: `configureApp` installs a JSON parser that keeps the
+    // raw bytes for webhook signature verification, so Nest must not install
+    // its own on top (milestone 08 §17).
+    { bodyParser: false },
+  );
   await configureApp(app);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;
+}
+
+/**
+ * Clears the financial tables that reference a Booking.
+ *
+ * They use `ON DELETE RESTRICT` on purpose — a Booking must not be able to
+ * take a settlement record with it in production — so a test that deletes
+ * Bookings has to clear these first.
+ */
+/**
+ * Clears connectivity state.
+ *
+ * `availability_blocks` cascades from the reservation mappings, so those go
+ * first — deleting a mapping frees the dates it was blocking, which is exactly
+ * the production behaviour.
+ */
+export async function clearConnectivity(database: Database): Promise<void> {
+  await database.db.execute(sql`DELETE FROM external_sync_attempts`);
+  await database.db.execute(sql`DELETE FROM external_provider_events`);
+  await database.db.execute(sql`DELETE FROM external_reservation_mappings`);
+  await database.db.execute(sql`DELETE FROM external_property_mappings`);
+  await database.db.execute(sql`DELETE FROM external_inventory_connections`);
+}
+
+export async function clearFinancials(database: Database): Promise<void> {
+  await database.db.execute(sql`DELETE FROM host_transfer_reversals`);
+  await database.db.execute(sql`DELETE FROM host_transfers`);
+  await database.db.execute(sql`DELETE FROM booking_settlements`);
+  await database.db.execute(sql`DELETE FROM host_payouts`);
+  await database.db.execute(sql`DELETE FROM refunds`);
+  await database.db.execute(sql`DELETE FROM payments`);
 }
 
 /** Registers a fresh Host and keeps its session cookie for later requests. */
@@ -116,9 +202,17 @@ export async function cleanupHosts(
   const userIds = created.map((host) => host.userId);
 
   if (hostIds.length > 0) {
+    // Connections cascade from the Host and take their mappings — and the
+    // availability blocks those mappings produced — with them.
+    await database.db
+      .delete(externalInventoryConnections)
+      .where(inArray(externalInventoryConnections.hostId, hostIds));
     await database.db.delete(properties).where(inArray(properties.hostId, hostIds));
     await database.db.delete(hosts).where(inArray(hosts.id, hostIds));
   }
+  // `admin_actions` restricts on the User that performed them — on purpose, so
+  // an audit row cannot disappear with the account it names.
+  await database.db.delete(adminActions).where(inArray(adminActions.adminUserId, userIds));
   await database.db.delete(users).where(inArray(users.id, userIds));
 }
 
@@ -223,15 +317,33 @@ export async function registerGuest(
   };
 }
 
+/**
+ * Promotes an account to staff.
+ *
+ * Straight into the column, the way the CLI does it: there is deliberately no
+ * endpoint that grants a role, so a test cannot go through one either
+ * (milestone 11 §3).
+ */
+export async function grantRole(
+  database: Database,
+  userId: string,
+  role: UserRole = "ADMIN",
+): Promise<void> {
+  await database.db
+    .update(users)
+    .set({ roles: [role] })
+    .where(inArray(users.id, [userId]));
+}
+
 /** Users without a Host profile need a different cleanup order. */
 export async function cleanupUsers(
   database: Database,
   users_: { userId: string }[],
 ): Promise<void> {
   if (users_.length === 0) return;
-  await database.db
-    .delete(users)
-    .where(inArray(users.id, users_.map((user) => user.userId)));
+  const ids = users_.map((user) => user.userId);
+  await database.db.delete(adminActions).where(inArray(adminActions.adminUserId, ids));
+  await database.db.delete(users).where(inArray(users.id, ids));
 }
 
 export { DATABASE };

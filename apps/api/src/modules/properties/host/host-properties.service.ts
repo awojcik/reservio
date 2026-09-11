@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -24,6 +25,7 @@ import {
   type PublishRequirement,
 } from "../../../domain/publish-readiness";
 import { slugify, uniqueSlug } from "../../../domain/slug";
+import { isStorableCoordinate } from "../../geocoding/domain/geocoding-provider";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/object-storage";
 import type {
   CreateHostPropertyDto,
@@ -132,8 +134,35 @@ export class HostPropertiesService {
       if (address.district !== undefined) patch.district = address.district;
       if (address.countryCode !== undefined) patch.countryCode = address.countryCode;
       if (address.timeZone !== undefined) patch.timeZone = address.timeZone;
-      if (address.latitude !== undefined) patch.latitude = address.latitude;
-      if (address.longitude !== undefined) patch.longitude = address.longitude;
+
+      /*
+       * Coordinates move as a pair or not at all.
+       *
+       * A latitude without a longitude is half a location, and the column
+       * range check would happily accept it — leaving a Property that passes
+       * publication and then cannot be put on a map. `0, 0` is refused for the
+       * same reason: it is in the Gulf of Guinea and is what a geocoder
+       * returns when it has parsed nothing (§7).
+       */
+      const { latitude, longitude } = address;
+      if (latitude !== undefined || longitude !== undefined) {
+        if (latitude === undefined || longitude === undefined) {
+          throw new BadRequestException({
+            code: "INCOMPLETE_COORDINATES",
+            message: "Szerokość i długość geograficzną zapisujemy razem.",
+          });
+        }
+
+        if (!isStorableCoordinate(latitude, longitude)) {
+          throw new BadRequestException({
+            code: "INVALID_COORDINATES",
+            message: "To nie jest poprawna lokalizacja obiektu.",
+          });
+        }
+
+        patch.latitude = latitude;
+        patch.longitude = longitude;
+      }
     }
 
     const capacity = dto.capacity;

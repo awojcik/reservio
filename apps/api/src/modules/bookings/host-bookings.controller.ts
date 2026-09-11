@@ -15,7 +15,11 @@ import type { HostRow } from "../../infrastructure/database/schema";
 import { BookingHoldWorker } from "./booking-hold.worker";
 import { BookingsService } from "./bookings.service";
 import { toHostBookingDto } from "./booking-mapper";
-import { HostBookingDto, HostBookingsQueryDto } from "./dto/booking.dto";
+import {
+  HostBookingDto,
+  HostBookingsPageDto,
+  HostBookingsQueryDto,
+} from "./dto/booking.dto";
 
 @ApiTags("host")
 @ApiCookieAuth("rezervio_session")
@@ -31,20 +35,28 @@ export class HostBookingsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Rezerwacje obiektów gospodarza" })
-  @ApiOkResponse({ type: [HostBookingDto] })
+  @ApiOperation({
+    summary: "Rezerwacje obiektów gospodarza",
+    description:
+      "Filtrowanie po statusie, obiekcie i zakresie dat, wyszukiwanie po numerze, imieniu i emailu gościa, sortowanie i paginacja.",
+  })
+  @ApiOkResponse({ type: HostBookingsPageDto })
   async list(
     @CurrentHost() host: HostRow,
     @Query() query: HostBookingsQueryDto,
-  ): Promise<HostBookingDto[]> {
-    const rows = await this.bookings.listForHost(host.id, query);
+  ): Promise<HostBookingsPageDto> {
+    const { items, total } = await this.bookings.listForHost(host.id, query);
 
-    return Promise.all(
-      rows.map(async (booking) => {
-        const hold = await this.bookings.findActiveHold(booking.id);
-        return toHostBookingDto(booking, hold?.expiresAt ?? null);
-      }),
-    );
+    // One batched lookup instead of a hold query per row.
+    const holds = await this.bookings.activeHoldsFor(items.map((item) => item.id));
+
+    return {
+      items: items.map((booking) =>
+        toHostBookingDto(booking, holds.get(booking.id) ?? null),
+      ),
+      total,
+      hasMore: (query.offset ?? 0) + items.length < total,
+    };
   }
 
   @Get(":id")

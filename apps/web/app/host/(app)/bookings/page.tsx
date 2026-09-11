@@ -1,39 +1,65 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import type { HostBookingsQuery } from "@rezervio/api-client";
+
 import { BookingActions } from "@/components/host/BookingActions";
+import { BookingFilters } from "@/components/host/BookingFilters";
 import { BookingStatusBadge } from "@/components/host/BookingStatusBadge";
 import { buttonStyles } from "@/components/ui/Button";
 import { createSessionApiClient } from "@/lib/api-server";
 import { formatAmountMinor, formatGuests, formatLongDateRange } from "@/lib/format";
+import { formatDeadline } from "@/lib/host-operations";
 
 export const metadata: Metadata = { title: "Rezerwacje" };
 
-const FILTERS = [
-  { value: "", label: "Wszystkie" },
-  { value: "PENDING_HOST_APPROVAL", label: "Do decyzji" },
-  { value: "PENDING_PAYMENT", label: "Czeka na płatność" },
-  { value: "CANCELLED", label: "Anulowane" },
-  { value: "EXPIRED", label: "Wygasłe" },
-] as const;
+const PAGE_SIZE = 20;
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
+/** Only the values the API declares — an unknown one is dropped, not passed on. */
+function pick(
+  params: Record<string, string | string[] | undefined>,
+  key: string,
+): string | undefined {
+  const value = params[key];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
 export default async function HostBookingsPage({ searchParams }: PageProps) {
   const resolved = await searchParams;
-  const status = typeof resolved.status === "string" ? resolved.status : "";
+  const offset = Math.max(0, Number(pick(resolved, "offset") ?? 0)) || 0;
+
+  const query = {
+    status: pick(resolved, "status"),
+    propertyId: pick(resolved, "propertyId"),
+    search: pick(resolved, "search"),
+    from: pick(resolved, "from"),
+    to: pick(resolved, "to"),
+    sort: pick(resolved, "sort"),
+    limit: PAGE_SIZE,
+    offset,
+  } as HostBookingsQuery;
 
   const client = await createSessionApiClient();
-  const bookings = await client.listHostBookings(
-    status ? { status } : {},
-    { cache: "no-store" },
-  );
+  const [page, properties] = await Promise.all([
+    client.listHostBookings(query, { cache: "no-store" }),
+    client.listHostProperties({ cache: "no-store" }),
+  ]);
 
-  const awaiting = bookings.filter(
-    (booking) => booking.status === "PENDING_HOST_APPROVAL",
-  ).length;
+  const shown = { from: page.total === 0 ? 0 : offset + 1, to: offset + page.items.length };
+
+  function pageHref(nextOffset: number): string {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(resolved)) {
+      if (typeof value === "string" && value && key !== "offset") params.set(key, value);
+    }
+    if (nextOffset > 0) params.set("offset", String(nextOffset));
+    const search = params.toString();
+    return search ? `/host/bookings?${search}` : "/host/bookings";
+  }
 
   return (
     <div className="py-8 sm:py-10">
@@ -41,35 +67,22 @@ export default async function HostBookingsPage({ searchParams }: PageProps) {
       <h1 className="mt-2 text-[30px] leading-tight font-bold tracking-tightest">
         Rezerwacje Twoich obiektów
       </h1>
-      {awaiting > 0 ? (
-        <p className="mt-3 text-[16px] font-semibold">
-          {awaiting} {awaiting === 1 ? "prośba czeka" : "prośby czekają"} na Twoją decyzję.
+
+      <BookingFilters properties={properties} />
+
+      {page.total > 0 ? (
+        <p className="mt-5 text-[13px] font-semibold text-muted tabular-nums">
+          {shown.from}–{shown.to} z {page.total}
         </p>
       ) : null}
 
-      <nav className="mt-5 flex flex-wrap gap-2" aria-label="Filtr rezerwacji">
-        {FILTERS.map((filter) => (
-          <Link
-            key={filter.value || "all"}
-            href={filter.value ? `/host/bookings?status=${filter.value}` : "/host/bookings"}
-            className={`inline-flex h-9 items-center rounded-full border px-3.5 text-[13px] font-bold transition-colors ${
-              status === filter.value
-                ? "border-accent bg-accent/12 text-ink"
-                : "border-line bg-surface text-ink hover:border-ink/35"
-            }`}
-          >
-            {filter.label}
-          </Link>
-        ))}
-      </nav>
-
-      {bookings.length === 0 ? (
-        <p className="mt-8 rounded-[14px] border border-dashed border-line bg-surface/60 px-5 py-10 text-center text-[15px] text-muted">
-          {status ? "Nic w tej kategorii." : "Nie masz jeszcze żadnych rezerwacji."}
+      {page.items.length === 0 ? (
+        <p className="mt-4 rounded-[14px] border border-dashed border-line bg-surface/60 px-5 py-10 text-center text-[15px] text-muted">
+          Nic nie pasuje do tych kryteriów.
         </p>
       ) : (
-        <ul className="mt-6 space-y-3">
-          {bookings.map((booking) => (
+        <ul className="mt-4 space-y-3">
+          {page.items.map((booking) => (
             <li
               key={booking.id}
               className="rounded-[14px] border border-line bg-surface p-4"
@@ -97,11 +110,7 @@ export default async function HostBookingsPage({ searchParams }: PageProps) {
                   {booking.status === "PENDING_HOST_APPROVAL" &&
                   booking.hostResponseDeadlineAt ? (
                     <p className="mt-0.5 text-[13px] font-semibold text-accent-edge">
-                      Odpowiedz do{" "}
-                      {new Intl.DateTimeFormat("pl-PL", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      }).format(new Date(booking.hostResponseDeadlineAt))}
+                      Odpowiedz do {formatDeadline(booking.hostResponseDeadlineAt)}
                     </p>
                   ) : null}
                 </div>
@@ -120,6 +129,31 @@ export default async function HostBookingsPage({ searchParams }: PageProps) {
           ))}
         </ul>
       )}
+
+      {offset > 0 || page.hasMore ? (
+        <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Strony">
+          {offset > 0 ? (
+            <Link
+              href={pageHref(Math.max(0, offset - PAGE_SIZE))}
+              className={buttonStyles("outline", "sm")}
+            >
+              Poprzednie
+            </Link>
+          ) : (
+            <span />
+          )}
+          {page.hasMore ? (
+            <Link
+              href={pageHref(offset + PAGE_SIZE)}
+              className={buttonStyles("outline", "sm")}
+            >
+              Następne
+            </Link>
+          ) : (
+            <span />
+          )}
+        </nav>
+      ) : null}
     </div>
   );
 }

@@ -4,17 +4,22 @@ import Link from "next/link";
 
 import { ApiError, type Booking } from "@rezervio/api-client";
 
+import { BookingStatusPoller } from "@/components/booking/BookingStatusPoller";
 import { BookingTimeline } from "@/components/booking/BookingTimeline";
 import { CancelBookingButton } from "@/components/booking/CancelBookingButton";
 import { GuestAccessExchange } from "@/components/booking/GuestAccessExchange";
 import { ClaimBookingPanel } from "@/components/booking/ClaimBookingPanel";
 import { HoldCountdown } from "@/components/booking/HoldCountdown";
+import { GuestConversation } from "@/components/booking/GuestConversation";
+import { PaymentPanel } from "@/components/booking/PaymentPanel";
+import { StayDetailsPanel } from "@/components/booking/StayDetailsPanel";
 import { Header } from "@/components/layout/Header";
 import { buttonStyles } from "@/components/ui/Button";
 import { createSessionApiClient } from "@/lib/api-server";
 import {
   BOOKING_STATUS_LABELS,
   BOOKING_STATUS_REASONS,
+  PAYMENT_STATUS_LABELS,
   isTerminal,
 } from "@/lib/booking";
 import { formatAmountMinor, formatGuests, formatLongDateRange } from "@/lib/format";
@@ -73,9 +78,28 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
     );
   }
 
+  /*
+   * The Stay details only exist once the Booking is real. Fetched separately
+   * so a Booking still awaiting a decision costs nothing extra.
+   */
+  const showsStay = booking.status === "CONFIRMED" || booking.status === "COMPLETED";
+  const stay = showsStay
+    ? await client.getStayDetails(reference, { cache: "no-store" }).catch(() => null)
+    : null;
+
   const awaitingHost = booking.status === "PENDING_HOST_APPROVAL";
   const awaitingPayment = booking.status === "PENDING_PAYMENT";
+  const confirmed = booking.status === "CONFIRMED";
   const finished = isTerminal(booking.status);
+
+  // The provider has the money but the confirming webhook has not landed yet.
+  const settling =
+    awaitingPayment &&
+    (booking.payment?.status === "PROCESSING" ||
+      booking.payment?.status === "SUCCEEDED");
+  const declined = awaitingPayment && booking.payment?.status === "FAILED";
+  const expiredWithoutStay =
+    booking.status === "EXPIRED" && booking.statusReason === "PAYMENT_AFTER_HOLD_EXPIRY";
 
   const Icon = finished ? XCircle : awaitingHost ? Clock : CheckCircle2;
 
@@ -93,19 +117,46 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
           <h1 className="mt-3 text-[26px] leading-tight font-bold tracking-tightest">
             {awaitingHost
               ? "Prośba została wysłana"
-              : awaitingPayment
-                ? "Termin jest dla Ciebie zablokowany"
-                : BOOKING_STATUS_LABELS[booking.status]}
+              : confirmed
+                ? "Rezerwacja potwierdzona"
+                : settling
+                  ? "Przetwarzamy płatność"
+                  : awaitingPayment
+                    ? "Termin jest dla Ciebie zablokowany"
+                    : BOOKING_STATUS_LABELS[booking.status]}
           </h1>
 
           <p className="mt-2 text-[15px] text-muted">
             {awaitingHost
               ? "Gospodarz musi ją zaakceptować. Do tego czasu rezerwacja nie jest potwierdzona."
-              : awaitingPayment
-                ? "Płatności jeszcze nie pobieramy — to kolejny etap MVP."
-                : (BOOKING_STATUS_REASONS[booking.statusReason ?? ""] ??
-                  "Ta rezerwacja nie jest już aktywna.")}
+              : confirmed
+                ? "Płatność została zaksięgowana, a termin jest zarezerwowany dla Ciebie."
+                : settling
+                  ? "Potwierdzenie przychodzi od operatora płatności. Ta strona odświeży się sama."
+                  : expiredWithoutStay
+                    ? "Płatność dotarła po wygaśnięciu blokady terminu. Zleciliśmy pełny zwrot."
+                    : awaitingPayment
+                      ? "Zapłać, żeby potwierdzić rezerwację."
+                      : (BOOKING_STATUS_REASONS[booking.statusReason ?? ""] ??
+                        "Ta rezerwacja nie jest już aktywna.")}
           </p>
+
+          {/* Polled, not asserted: only the backend can say a Booking is paid. */}
+          {settling ? <BookingStatusPoller /> : null}
+
+          {declined ? (
+            <p
+              role="alert"
+              className="mt-4 rounded-[10px] border border-accent-edge/40 bg-accent/10 px-3.5 py-2.5 text-[14px]"
+            >
+              Płatność nie powiodła się. Spróbuj ponownie przed wygaśnięciem blokady.
+              {booking.payment?.failureMessage ? (
+                <span className="mt-1 block text-muted">
+                  {booking.payment.failureMessage}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
 
           {awaitingHost && booking.hostResponseDeadlineAt ? (
             <p className="mt-4 rounded-[10px] border border-line bg-background px-3.5 py-2.5 text-[14px]">
@@ -116,7 +167,7 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
             </p>
           ) : null}
 
-          {awaitingPayment && booking.holdExpiresAt ? (
+          {awaitingPayment && !settling && booking.holdExpiresAt ? (
             <p className="mt-4 rounded-[10px] border border-line bg-background px-3.5 py-2.5 text-[14px]">
               Termin trzymamy jeszcze <HoldCountdown expiresAt={booking.holdExpiresAt} />
             </p>
@@ -153,6 +204,15 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
                 {formatAmountMinor(booking.price.totalAmountMinor)}
               </dd>
             </div>
+            {booking.payment ? (
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted">Płatność</dt>
+                <dd className="font-semibold">
+                  {PAYMENT_STATUS_LABELS[booking.payment.status ?? ""] ??
+                    booking.payment.status}
+                </dd>
+              </div>
+            ) : null}
           </dl>
 
           {/* Offered only while the Booking belongs to nobody. */}
@@ -172,6 +232,27 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
             </div>
           ) : null}
         </div>
+
+        {/* The backend decides whether paying is still possible; the panel is
+            a consequence of that answer, never its own judgement. */}
+        {booking.allowedActions.canPay && !settling ? (
+          <PaymentPanel
+            reference={booking.reference}
+            totalAmountMinor={booking.price.totalAmountMinor}
+            holdExpiresAt={booking.holdExpiresAt}
+          />
+        ) : null}
+
+        {stay ? <StayDetailsPanel stay={stay} /> : null}
+
+        {/* Messaging exists inside a Booking, and only there (milestone 09 §24). */}
+        {!finished || booking.status === "COMPLETED" ? (
+          <GuestConversation
+            reference={booking.reference}
+            hostName="gospodarza"
+            canWrite={booking.status !== "CANCELLED" && booking.status !== "EXPIRED"}
+          />
+        ) : null}
 
         <div className="mt-5 flex flex-wrap gap-3">
           <Link href="/search" className={buttonStyles("outline", "md")}>

@@ -1,0 +1,4 @@
+ALTER TABLE "admin_actions" DROP CONSTRAINT "admin_actions_type_check";--> statement-breakpoint
+ALTER TABLE "admin_actions" DROP CONSTRAINT "admin_actions_target_check";--> statement-breakpoint
+ALTER TABLE "admin_actions" ADD CONSTRAINT "admin_actions_type_check" CHECK ("admin_actions"."action_type" IN ('RETRY_NOTIFICATION','RETRY_REFUND','RETRY_TRANSFER','RETRY_JOB','ICAL_RESYNC','REFRESH_CONNECT_STATUS','RECONCILE','RETRY_INTEGRATION_SYNC','RECONCILE_INTEGRATION','DISABLE_INTEGRATION','RETRY_OUTBOUND_RESERVATION'));--> statement-breakpoint
+ALTER TABLE "admin_actions" ADD CONSTRAINT "admin_actions_target_check" CHECK ("admin_actions"."target_type" IN ('BOOKING','NOTIFICATION','REFUND','SETTLEMENT','HOST','EXTERNAL_CALENDAR','JOB','PLATFORM','CONNECTION'));

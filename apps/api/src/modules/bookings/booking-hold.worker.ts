@@ -20,6 +20,7 @@ import {
 import { DATABASE } from "../../infrastructure/database/database.module";
 import type { Database } from "../../infrastructure/database/connection";
 import { bookingHolds } from "../../infrastructure/database/schema";
+import { PaymentCancelScheduler } from "../payments/payment-cancel.scheduler";
 import { BookingsService } from "./bookings.service";
 
 /**
@@ -41,6 +42,7 @@ export class BookingHoldWorker implements OnModuleInit, OnApplicationShutdown {
     @Inject(HOLD_QUEUE) private readonly queue: Queue<BookingHoldJob>,
     @Inject(DATABASE) private readonly database: Database,
     private readonly bookings: BookingsService,
+    private readonly paymentCancels: PaymentCancelScheduler,
     private readonly config: ConfigService,
   ) {}
 
@@ -77,7 +79,7 @@ export class BookingHoldWorker implements OnModuleInit, OnApplicationShutdown {
       BOOKING_HOLD_QUEUE,
       async (job) => {
         if (job.name === SWEEP_JOB) return this.sweepExpired();
-        return this.bookings.expireBookingHold(job.data.holdId);
+        return this.expire(job.data.holdId);
       },
       {
         connection: this.connection,
@@ -115,6 +117,30 @@ export class BookingHoldWorker implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * Expires one hold, then tells the provider the intent is dead.
+   *
+   * Order matters: availability is released by the transaction above, and the
+   * provider call is a courtesy afterwards. Waiting for Stripe before freeing
+   * the calendar would put a network round trip on the critical path of
+   * somebody else's booking (milestone 08 §27).
+   */
+  private async expire(holdId: string): Promise<{ expired: boolean }> {
+    const hold = await this.database.db
+      .select({ bookingId: bookingHolds.bookingId })
+      .from(bookingHolds)
+      .where(eq(bookingHolds.id, holdId))
+      .limit(1);
+
+    const result = await this.bookings.expireBookingHold(holdId);
+
+    if (result.expired && hold[0]) {
+      await this.paymentCancels.cancelOpenPayments(hold[0].bookingId);
+    }
+
+    return result;
+  }
+
+  /**
    * Safety net for holds whose job was lost — a Redis flush, a crash between
    * commit and enqueue. Availability is already correct without it; this only
    * moves the rows to their final state.
@@ -129,7 +155,7 @@ export class BookingHoldWorker implements OnModuleInit, OnApplicationShutdown {
 
     let expired = 0;
     for (const hold of due) {
-      const result = await this.bookings.expireBookingHold(hold.id);
+      const result = await this.expire(hold.id);
       if (result.expired) expired += 1;
     }
     return { expired };

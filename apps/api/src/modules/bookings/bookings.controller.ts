@@ -10,8 +10,8 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   ApiConflictResponse,
@@ -23,30 +23,35 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 
+import { cookieOptionsFor } from "../../infrastructure/security/cookie-options";
+import {
+  RateLimit,
+  RateLimitGuard,
+} from "../../infrastructure/security/rate-limit.guard";
+import { AppEnvironmentService } from "../../infrastructure/security/security.module";
 import { AccountService } from "../account/account.service";
 import { HostsService } from "../hosts/hosts.service";
 import { SessionsService } from "../auth/sessions.service";
 import { BookingHoldWorker } from "./booking-hold.worker";
 import { BookingLifecycleWorker } from "./booking-lifecycle.worker";
 import { BookingsService } from "./bookings.service";
-import { GuestAccessService } from "./guest-access.service";
+import {
+  GUEST_COOKIE,
+  GUEST_COOKIE_MAX_AGE,
+  GuestAccessService,
+  guestTokenFrom,
+} from "./guest-access.service";
 import { IdempotencyService } from "./idempotency.service";
+import { PaymentReadService } from "../payments/payment-read.service";
 import { toBookingDto } from "./booking-mapper";
 import { BookingDto, CreateBookingDto, GuestAccessDto } from "./dto/booking.dto";
 
 const IDEMPOTENCY_SCOPE = "bookings.create";
 
-/**
- * Short-lived cookie holding the Guest access token, so the secret leaves the
- * URL after the first visit and does not sit in browser history or a Referer
- * header (milestone 05 §16).
- */
-const GUEST_COOKIE = "rezervio_booking_access";
-const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
-
 type CookieRequest = FastifyRequest & { cookies?: Record<string, string | undefined> };
 
 @ApiTags("bookings")
+@UseGuards(RateLimitGuard)
 @Controller("bookings")
 export class BookingsController {
   constructor(
@@ -58,7 +63,8 @@ export class BookingsController {
     private readonly sessions: SessionsService,
     private readonly hosts: HostsService,
     private readonly account: AccountService,
-    private readonly config: ConfigService,
+    private readonly paymentState: PaymentReadService,
+    private readonly environment: AppEnvironmentService,
   ) {}
 
   /**
@@ -157,6 +163,19 @@ export class BookingsController {
     return toBookingDto(booking, holdExpiresAt, events);
   }
 
+  /*
+   * The only endpoint that turns a Booking reference plus a token into a
+   * cookie, so it is also the only place worth guessing at. Keyed by reference
+   * as well as address: one Guest retrying their own link must not consume the
+   * budget of everyone behind the same NAT (milestone 11 §20).
+   */
+  @RateLimit({
+    bucket: "guest-access",
+    limit: 20,
+    windowSeconds: 300,
+    scope: "route-param",
+    param: "reference",
+  })
   @Post(":reference/access")
   @HttpCode(200)
   @ApiOperation({
@@ -198,8 +217,7 @@ export class BookingsController {
       throw new UnauthorizedException("Zaloguj się, aby zapisać tę podróż na koncie.");
     }
 
-    const query = (request.query ?? {}) as { token?: string };
-    const guestToken = query.token ?? request.cookies?.[GUEST_COOKIE];
+    const guestToken = guestTokenFrom(request);
     if (!guestToken) {
       throw new UnauthorizedException("Otwórz rezerwację linkiem z wiadomości email.");
     }
@@ -255,21 +273,18 @@ export class BookingsController {
    * (milestone 05 §66).
    */
   private setGuestCookie(reply: FastifyReply, token: string): void {
-    reply.setCookie(GUEST_COOKIE, token, {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      secure: this.config.get("NODE_ENV") === "production",
-      maxAge: GUEST_COOKIE_MAX_AGE,
-    });
+    reply.setCookie(
+      GUEST_COOKIE,
+      token,
+      cookieOptionsFor(this.environment.name, GUEST_COOKIE_MAX_AGE),
+    );
   }
 
   private async requireGuestAccess(
     reference: string,
     request: CookieRequest,
   ): Promise<string> {
-    const query = (request.query ?? {}) as { token?: string };
-    const token = query.token ?? request.cookies?.[GUEST_COOKIE];
+    const token = guestTokenFrom(request);
 
     if (!token) {
       throw new UnauthorizedException("Otwórz rezerwację linkiem z wiadomości email.");
@@ -281,8 +296,11 @@ export class BookingsController {
   private async render(bookingId: string): Promise<BookingDto> {
     const booking = await this.bookings.findByIdInternal(bookingId);
     const { holdExpiresAt } = await this.bookings.findByReference(booking.publicReference);
-    const events = await this.bookings.timelineFor(bookingId);
+    const [events, payment] = await Promise.all([
+      this.bookings.timelineFor(bookingId),
+      this.paymentState.forBooking(bookingId),
+    ]);
 
-    return toBookingDto(booking, holdExpiresAt, events);
+    return toBookingDto(booking, holdExpiresAt, events, payment);
   }
 }

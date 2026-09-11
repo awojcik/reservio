@@ -333,6 +333,7 @@ BOOKING
 BOOKING_HOLD
 HOST_BLOCK
 EXTERNAL_CALENDAR
+EXTERNAL_PROVIDER
 MAINTENANCE
 ```
 
@@ -341,6 +342,10 @@ MAINTENANCE
 ```text
 AvailabilityBlock
 ```
+
+`EXTERNAL_CALENDAR` i `EXTERNAL_PROVIDER` to celowo dwie różne rzeczy. Pierwsza
+to nieprzejrzysty okres zajętości ze snapshotu iCal. Druga to rezerwacja, którą
+znamy po identyfikatorze i możemy prześledzić przez modyfikację i anulowanie.
 
 ---
 
@@ -563,6 +568,35 @@ Rezervio nie przechowuje surowych danych kart.
 
 Źródłem prawdy o powodzeniu Payment jest PSP/webhook, nie frontend.
 
+**Statusy kanoniczne:**
+
+```text
+CREATED
+PROCESSING
+REQUIRES_ACTION
+SUCCEEDED
+FAILED
+CANCELLED
+REFUND_PENDING
+REFUNDED
+PARTIALLY_REFUNDED
+```
+
+Nie mapujemy 1:1 statusów PSP do domeny — dostawca rozróżnia więcej stanów, niż
+potrzebuje Rezervio.
+
+`REQUIRES_ACTION` **nie jest** porażką: to trwające wyzwanie 3-D Secure.
+Potraktowanie go jako final failure odrzucałoby w Europie większość płatności.
+
+Kwota Payment pochodzi wyłącznie ze snapshotu Booking:
+
+```text
+Booking.totalAmountMinor
+Booking.currency
+```
+
+Kwota przysłana przez przeglądarkę jest ignorowana.
+
 ---
 
 ## Payout
@@ -576,6 +610,136 @@ Payout
 ```
 
 Nie używamy `Payment` dla wypłaty do Host.
+
+Cztery różne rzeczy, których nigdy nie mylimy:
+
+```text
+Payment     Guest              → Rezervio
+Settlement  ile należy się Hostowi i od kiedy
+Transfer    saldo platformy    → Connected Account Hosta
+Payout      Connected Account  → bank Hosta
+```
+
+```text
+Payment    != Settlement
+Settlement != Transfer
+Transfer   != Payout
+```
+
+Udany Payment **nie** oznacza, że Host dostał pieniądze.
+
+Payout wykonuje dostawca według harmonogramu konta — Rezervio go obserwuje,
+a nie inicjuje. Statusy:
+
+```text
+PENDING
+IN_TRANSIT
+PAID
+FAILED
+CANCELLED
+```
+
+---
+
+## Settlement
+
+Wewnętrzne rozliczenie Rezervio: ile należy się Hostowi za konkretną rezerwację
+i od kiedy.
+
+**Nazwa kanoniczna:**
+
+```text
+Settlement
+```
+
+```text
+gross        = Booking total snapshot
+- platformFee = PlatformFee snapshot
+= hostAmount
+```
+
+**Settlement nie jest przelewem.** To zapis zobowiązania, nie ruch pieniędzy.
+
+Statusy:
+
+```text
+PENDING
+AVAILABLE
+TRANSFER_PENDING
+TRANSFERRED
+CANCELLED
+FAILED
+REVERSAL_PENDING
+REVERSED
+```
+
+Jeden Settlement na Booking — wymusza to unikalny indeks, nie ostrożność w kodzie.
+
+---
+
+## HostAmount
+
+Kwota należna Hostowi za daną rezerwację.
+
+**Nazwa kanoniczna:**
+
+```text
+HostAmount
+```
+
+Pochodzi **wyłącznie** z niezmiennego snapshotu finansowego Booking. Nigdy
+z request body i nigdy przez przeliczenie starej rezerwacji aktualną prowizją.
+
+---
+
+## releaseAt
+
+Moment, od którego środki mogą zostać przekazane Hostowi.
+
+**Nazwa kanoniczna:**
+
+```text
+releaseAt
+```
+
+```text
+releaseAt = check-in (w Property.timeZone) + HOST_SETTLEMENT_RELEASE_DELAY_HOURS
+```
+
+Zapisywany jako instant. Kolejka nie jest źródłem prawdy — decyduje kolumna
+`release_at` i status Settlement.
+
+---
+
+## Transfer
+
+Ruch pieniędzy z salda platformy na Connected Account Hosta.
+
+**Nazwa kanoniczna:**
+
+```text
+Transfer
+```
+
+To główna operacja finansowa kontrolowana przez Rezervio.
+
+**Transfer != Payout.**
+
+---
+
+## TransferReversal
+
+Cofnięcie wykonanego Transfer po zwrocie dla gościa.
+
+**Nazwa kanoniczna:**
+
+```text
+TransferReversal
+```
+
+W modelu Separate Charges and Transfers zwrot obciążenia **nie** cofa
+wcześniejszego Transfer — pieniądze są już u Hosta. Trzeba je odzyskać osobno,
+dokładnie raz.
 
 ---
 
@@ -621,7 +785,146 @@ FULL
 PARTIAL
 ```
 
+Statusy:
+
+```text
+PENDING
+PROCESSING
+SUCCEEDED
+FAILED
+```
+
 Cancellation Booking i Refund są powiązane, ale nie są tym samym procesem.
+
+Decyzją o zwrocie jest **wiersz Refund w PostgreSQL**, a nie zadanie w kolejce.
+Kolejka jedynie wykonuje decyzję u dostawcy; skasowanie Redisa nie może
+sprawić, że Guest przestanie być uprawniony do pieniędzy.
+
+Zwrot jest dokładnie jeden na parę `(Payment, reason)` — wymusza to unikalny
+indeks, nie ostrożność w kodzie.
+
+---
+
+## StayInformation
+
+Komplet informacji, których Guest potrzebuje, żeby skorzystać z obiektu.
+
+**Nazwa kanoniczna:**
+
+```text
+StayInformation
+```
+
+Należy do **Property**, nie do Booking. Host konfiguruje ją raz; poprawka
+instrukcji wejścia ma dotrzeć do gościa, który przyjeżdża jutro.
+
+Zawiera m.in.:
+
+```text
+checkInTime / checkOutTime
+arrivalInstructions
+parkingInstructions
+wifiName / wifiPassword
+houseRules
+departureInstructions
+emergencyContact
+```
+
+Godziny są **lokalnym czasem zegarowym** obiektu (`15:00`), interpretowanym
+w `Property.timeZone`. Nie zapisujemy ich jako instantu UTC.
+
+Publicznie pokazujemy wyłącznie `checkInTime`, `checkOutTime` i `houseRules`.
+Reszta wymaga dostępu do konkretnego Booking.
+
+---
+
+## SensitiveAccess
+
+Dane, którymi otwiera się drzwi.
+
+**Nazwa kanoniczna:**
+
+```text
+SensitiveAccess
+```
+
+Osobny model od `StayInformation`, bo rządzi się innymi regułami:
+
+- szyfrowane at rest (AES-256-GCM);
+- ujawniane dopiero w `revealAt`, o czym decyduje **backend**;
+- nigdy nie trafiają do emaila.
+
+```text
+effectiveRevealAt = manualRevealAt ?? checkInAt - revealOffsetHours
+```
+
+`manualRevealAt` jest per Booking. Ręczne udostępnienie jednemu gościowi
+**nie zmienia** domyślnego offsetu Property.
+
+---
+
+## StayPhase
+
+Gdzie znajduje się pobyt w czasie.
+
+**Nazwa kanoniczna:**
+
+```text
+StayPhase
+```
+
+Wartości:
+
+```text
+BEFORE_STAY
+IN_STAY
+AFTER_STAY
+```
+
+**Wyliczane**, nie przechowywane — z dat Booking i `Property.timeZone`.
+
+Nie dodajemy statusów `CHECKED_IN` ani `CHECKED_OUT`. Guest niczego nie
+potwierdza: nie klika „przyjechałem" ani „wyjechałem".
+
+---
+
+## Conversation
+
+Rozmowa Guest ↔ Host w kontekście jednej rezerwacji.
+
+**Nazwa kanoniczna:**
+
+```text
+Conversation
+```
+
+Istnieje **wyłącznie** wewnątrz Booking — jedna na Booking. Nie budujemy
+globalnego messengera User↔User: bez Booking nie ma o czym rozmawiać i nikt
+nie jest uprawniony.
+
+---
+
+## Message
+
+Pojedyncza wiadomość w Conversation.
+
+**Nazwa kanoniczna:**
+
+```text
+Message
+```
+
+Nadawca:
+
+```text
+GUEST
+HOST
+SYSTEM
+```
+
+`senderUserId` jest nullable — Guest bez konta też pisze, przez ważny Guest
+Booking access. Treść to zwykły tekst (1–4000 znaków); nie renderujemy HTML
+ani Markdown.
 
 ---
 
@@ -944,6 +1247,97 @@ Feed nie zawiera notatek Host, nazwy providera ani danych osobowych.
 
 ---
 
+## ExternalInventoryConnection
+
+Połączenie jednego `Host` z jednym zewnętrznym systemem — PMS albo channel
+managerem.
+
+**Nazwa kanoniczna:**
+
+```text
+ExternalInventoryConnection
+```
+
+Stany:
+
+```text
+PENDING
+CONNECTED
+DEGRADED           odpowiada, ale ostatnia synchronizacja nie powiodła się
+DISCONNECTED
+ACTION_REQUIRED    coś musi się wydarzyć poza Rezervio
+```
+
+Powód, dla którego połączenie nie jest po prostu `CONNECTED`, jest osobnym
+polem — `PARTNER_ACCESS_REQUIRED` to nie awaria, tylko krok biznesowy, który
+jeszcze się nie odbył.
+
+Dane dostępowe trzymamy zaszyfrowane (AES-256-GCM), nie logujemy ich, nie
+zwracamy przez API i nie pokazujemy w panelu — nawet zamaskowanych.
+
+---
+
+## ExternalPropertyMapping
+
+Odpowiedniość: **jeden `Property` Rezervio ↔ jeden listing u dostawcy**.
+
+**Nazwa kanoniczna:**
+
+```text
+ExternalPropertyMapping
+```
+
+Zawsze zatwierdzana przez `Host`. Dopasowanie po nazwie jest **propozycją**,
+nigdy decyzją: pomyłka blokowałaby kalendarz nie tego obiektu, a pierwszą osobą,
+która by to zauważyła, byłby gość stojący przed zajętym mieszkaniem.
+
+Unikalna w obie strony — jeden obiekt do jednego listingu i odwrotnie.
+
+---
+
+## ExternalReservation
+
+Rezerwacja, która istnieje w zewnętrznym systemie.
+
+**Nazwa kanoniczna:**
+
+```text
+ExternalReservation
+```
+
+**To nie jest `Booking`.** Nie ma gościa Rezervio, ceny ustalonej przez nas ani
+płatności, którą pobraliśmy. Tworzenie pełnego `Booking` dla każdej takiej
+rezerwacji wymyślałoby wszystkie trzy rzeczy naraz.
+
+W Rezervio jest **projekcją**: `ExternalReservationMapping` plus
+`AvailabilityBlock` o źródle `EXTERNAL_PROVIDER`.
+
+---
+
+## ExternalReservationMapping
+
+Powiązanie rezerwacji tam z rezerwacją tutaj.
+
+**Nazwa kanoniczna:**
+
+```text
+ExternalReservationMapping
+```
+
+Kierunki:
+
+```text
+INBOUND    rezerwacja z zewnętrznego systemu, bez booking_id
+OUTBOUND   Booking Rezervio przekazany dostawcy
+```
+
+Unikalna para `(connection, external reservation id)` sprawia, że powtórzony
+webhook i nakładający się polling zbiegają się do jednego efektu. Częściowy
+unikalny indeks na `(connection, booking_id)` dla `OUTBOUND` sprawia, że
+ponowione przekazanie nie tworzy drugiej rezerwacji u dostawcy.
+
+---
+
 ## PMS
 
 Property Management System używany przez Host/operatora.
@@ -973,6 +1367,20 @@ HostawayInventoryProvider
 ```
 
 Logika domenowa nie może być zależna od konkretnego PMS.
+
+### PMS to nie to samo, co channel manager
+
+Dwie różne relacje, nie dwa warianty tej samej:
+
+```text
+PMS              Rezervio dzwoni do cudzego systemu       (klient)
+Channel manager  cudzy system dzwoni do Rezervio          (kanał)
+```
+
+W pierwszym przypadku Rezervio trzyma cudze dane dostępowe i pyta. W drugim
+Rezervio **jest kanałem sprzedaży** i wystawia endpointy, które channel manager
+odpytuje. Wciśnięcie obu w jeden interfejs produkuje metody, które po jednej
+stronie nic nie znaczą.
 
 ---
 
@@ -1681,6 +2089,18 @@ lokalnego snapshotu Payment status
 wykonania Payment
 wykonania Refund
 ```
+
+Wiarygodnym sygnałem jest **zweryfikowany podpisem webhook**, odebrany
+server-side — nigdy komunikat z przeglądarki. Przeglądarka nie jest kanałem
+zaufanym: każdy może wywołać nasze API i powiedzieć „zapłacone".
+
+```text
+client says success   → nic
+verified webhook      → Booking CONFIRMED
+```
+
+Ten sam `provider_event_id` ma dawać dokładnie jeden efekt domenowy —
+dostawcy dostarczają zdarzenia „co najmniej raz" i pozwalają je odtwarzać.
 
 ## PMS
 

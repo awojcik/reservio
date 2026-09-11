@@ -8,7 +8,7 @@ import { ApiError } from "@rezervio/api-client";
 import { BookingForm } from "@/components/booking/BookingForm";
 import { Header } from "@/components/layout/Header";
 import { createServerApiClient } from "@/lib/api-server";
-import { parseSearchQuery } from "@/lib/search";
+import { EMPTY_QUERY, buildSearchParams, parseSearchQuery } from "@/lib/search";
 import { loadIdentity } from "@/lib/session";
 
 type PageProps = {
@@ -46,11 +46,12 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
     throw error;
   }
 
-  const backToProperty = `/property/${slug}?${new URLSearchParams({
+  const backToProperty = `/property/${slug}?${buildSearchParams({
+    ...EMPTY_QUERY,
     checkIn: query.checkIn,
     checkOut: query.checkOut,
-    adults: String(query.adults),
-    children: String(query.children),
+    adults: query.adults,
+    children: query.children,
   }).toString()}`;
 
   return (

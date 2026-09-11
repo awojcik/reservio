@@ -6,14 +6,23 @@ import { and, eq, gt, lt } from "drizzle-orm";
 
 import { DATABASE } from "../../infrastructure/database/database.module";
 import type { Database, Executor } from "../../infrastructure/database/connection";
-import { userSessions, users } from "../../infrastructure/database/schema";
+import {
+  userSessions,
+  users,
+  type UserRole,
+} from "../../infrastructure/database/schema";
 
 const TOKEN_BYTES = 32;
 const DEFAULT_TTL_SECONDS = 604_800; // 7 days
 /** Writing `last_seen_at` on every request would make each GET a write. */
 const LAST_SEEN_THROTTLE_MS = 5 * 60 * 1000;
 
-export type SessionUser = { id: string; email: string };
+export type SessionUser = {
+  id: string;
+  email: string;
+  /** Staff roles, empty for an ordinary account. Never sent to the browser. */
+  roles: UserRole[];
+};
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -59,6 +68,7 @@ export class SessionsService {
         lastSeenAt: userSessions.lastSeenAt,
         userId: users.id,
         email: users.email,
+        roles: users.roles,
       })
       .from(userSessions)
       .innerJoin(users, eq(users.id, userSessions.userId))
@@ -77,7 +87,7 @@ export class SessionsService {
         .where(eq(userSessions.id, row.sessionId));
     }
 
-    return { id: row.userId, email: row.email };
+    return { id: row.userId, email: row.email, roles: (row.roles ?? []) as UserRole[] };
   }
 
   /** Idempotent: logging out twice is a success both times (milestone 02 §16). */

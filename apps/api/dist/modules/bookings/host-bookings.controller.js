@@ -28,11 +28,13 @@ let HostBookingsController = class HostBookingsController {
         this.holds = holds;
     }
     async list(host, query) {
-        const rows = await this.bookings.listForHost(host.id, query);
-        return Promise.all(rows.map(async (booking) => {
-            const hold = await this.bookings.findActiveHold(booking.id);
-            return (0, booking_mapper_1.toHostBookingDto)(booking, hold?.expiresAt ?? null);
-        }));
+        const { items, total } = await this.bookings.listForHost(host.id, query);
+        const holds = await this.bookings.activeHoldsFor(items.map((item) => item.id));
+        return {
+            items: items.map((booking) => (0, booking_mapper_1.toHostBookingDto)(booking, holds.get(booking.id) ?? null)),
+            total,
+            hasMore: (query.offset ?? 0) + items.length < total,
+        };
     }
     async detail(host, id) {
         const { booking, holdExpiresAt } = await this.bookings.findForHost(host.id, id);
@@ -63,8 +65,11 @@ let HostBookingsController = class HostBookingsController {
 exports.HostBookingsController = HostBookingsController;
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: "Rezerwacje obiektów gospodarza" }),
-    (0, swagger_1.ApiOkResponse)({ type: [booking_dto_1.HostBookingDto] }),
+    (0, swagger_1.ApiOperation)({
+        summary: "Rezerwacje obiektów gospodarza",
+        description: "Filtrowanie po statusie, obiekcie i zakresie dat, wyszukiwanie po numerze, imieniu i emailu gościa, sortowanie i paginacja.",
+    }),
+    (0, swagger_1.ApiOkResponse)({ type: booking_dto_1.HostBookingsPageDto }),
     __param(0, (0, auth_guards_1.CurrentHost)()),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),

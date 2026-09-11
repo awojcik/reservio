@@ -79,7 +79,19 @@ let PropertiesService = class PropertiesService {
                 endDate: stay.checkOut,
             })
             : null;
+        const [stayInfo] = await db
+            .select({
+            checkInTime: schema_1.propertyStayInformation.checkInTime,
+            checkOutTime: schema_1.propertyStayInformation.checkOutTime,
+            houseRules: schema_1.propertyStayInformation.houseRules,
+        })
+            .from(schema_1.propertyStayInformation)
+            .where((0, drizzle_orm_1.eq)(schema_1.propertyStayInformation.propertyId, property.id))
+            .limit(1);
         return {
+            checkInTime: stayInfo?.checkInTime ?? "15:00",
+            checkOutTime: stayInfo?.checkOutTime ?? "11:00",
+            houseRules: stayInfo?.houseRules ?? null,
             id: property.id,
             slug: property.slug,
             title: property.title,

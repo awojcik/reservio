@@ -17,6 +17,7 @@ exports.BookingsService = exports.CannotBookOwnPropertyError = exports.PropertyN
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const drizzle_orm_1 = require("drizzle-orm");
+const pg_values_1 = require("../../common/pg-values");
 const database_module_1 = require("../../infrastructure/database/database.module");
 const schema_1 = require("../../infrastructure/database/schema");
 const outbox_service_1 = require("../../infrastructure/outbox/outbox.service");
@@ -26,6 +27,7 @@ const booking_1 = require("../../domain/booking");
 const availability_1 = require("../../domain/availability");
 const availability_service_1 = require("../availability/availability.service");
 const object_storage_1 = require("../storage/object-storage");
+const stay_schedule_canceller_1 = require("../stay/stay-schedule.canceller");
 class BookingRequestExpiredError extends common_1.ConflictException {
     constructor() {
         super({
@@ -59,14 +61,16 @@ let BookingsService = BookingsService_1 = class BookingsService {
     storage;
     outbox;
     guestAccess;
+    stayJobs;
     config;
     logger = new common_1.Logger(BookingsService_1.name);
-    constructor(database, availability, storage, outbox, guestAccess, config) {
+    constructor(database, availability, storage, outbox, guestAccess, stayJobs, config) {
         this.database = database;
         this.availability = availability;
         this.storage = storage;
         this.outbox = outbox;
         this.guestAccess = guestAccess;
+        this.stayJobs = stayJobs;
         this.config = config;
     }
     get holdTtlSeconds() {
@@ -91,6 +95,20 @@ let BookingsService = BookingsService_1 = class BookingsService {
             aggregateId: bookingId,
             payload: { bookingId, notificationType: type },
         });
+    }
+    async recordPaymentEvent(bookingId, type, metadata, executor = this.database.db) {
+        await this.recordEvent(executor, bookingId, type, "SYSTEM", null, metadata ?? undefined);
+    }
+    async recordOutboxIntent(executor, bookingId, type) {
+        await this.outbox.record(executor, {
+            type,
+            aggregateType: "booking",
+            aggregateId: bookingId,
+            payload: { bookingId },
+        });
+    }
+    async notifyBooking(bookingId, type, executor = this.database.db) {
+        await this.notify(executor, bookingId, type);
     }
     async createBooking(input) {
         const stay = { startDate: input.checkIn, endDate: input.checkOut };
@@ -408,11 +426,21 @@ let BookingsService = BookingsService_1 = class BookingsService {
                 .returning();
             await this.recordEvent(tx, booking.id, actor === "GUEST" ? "GUEST_CANCELLED" : "HOST_CANCELLED", actor, actorId);
             await this.notify(tx, booking.id, actor === "GUEST" ? "BOOKING_CANCELLED_BY_GUEST" : "BOOKING_CANCELLED_BY_HOST");
+            await this.outbox.record(tx, {
+                type: "EXTERNAL_RESERVATION_CANCEL",
+                aggregateType: "booking",
+                aggregateId: booking.id,
+                payload: { bookingId: booking.id },
+            });
             this.logger.log({
                 event: actor === "GUEST" ? "booking.cancelled.guest" : "booking.cancelled.host",
                 bookingId: booking.id,
                 propertyId: booking.propertyId,
             });
+            return updated;
+        })
+            .then(async (updated) => {
+            await this.stayJobs.cancelFor(bookingId);
             return updated;
         });
     }
@@ -489,16 +517,57 @@ let BookingsService = BookingsService_1 = class BookingsService {
         return { booking, holdExpiresAt: hold?.expiresAt ?? null };
     }
     async listForHost(hostId, filters) {
-        const conditions = [(0, drizzle_orm_1.eq)(schema_1.bookings.hostId, hostId)];
+        const limit = filters.limit ?? 20;
+        const offset = filters.offset ?? 0;
+        const conditions = [(0, drizzle_orm_1.sql) `b.host_id = ${hostId}`];
         if (filters.status)
-            conditions.push((0, drizzle_orm_1.eq)(schema_1.bookings.status, filters.status));
+            conditions.push((0, drizzle_orm_1.sql) `b.status = ${filters.status}`);
         if (filters.propertyId)
-            conditions.push((0, drizzle_orm_1.eq)(schema_1.bookings.propertyId, filters.propertyId));
-        return this.database.db
-            .select()
-            .from(schema_1.bookings)
-            .where((0, drizzle_orm_1.and)(...conditions))
-            .orderBy((0, drizzle_orm_1.desc)(schema_1.bookings.createdAt));
+            conditions.push((0, drizzle_orm_1.sql) `b.property_id = ${filters.propertyId}`);
+        if (filters.from)
+            conditions.push((0, drizzle_orm_1.sql) `b.check_out > ${filters.from}::date`);
+        if (filters.to)
+            conditions.push((0, drizzle_orm_1.sql) `b.check_in < ${filters.to}::date`);
+        if (filters.search) {
+            const pattern = `%${filters.search.toLowerCase()}%`;
+            conditions.push((0, drizzle_orm_1.sql) `(
+        lower(b.public_reference) LIKE ${pattern}
+        OR lower(b.guest_name) LIKE ${pattern}
+        OR lower(b.guest_email) LIKE ${pattern}
+      )`);
+        }
+        const where = drizzle_orm_1.sql.join(conditions, (0, drizzle_orm_1.sql) ` AND `);
+        const rows = (await this.database.db.execute((0, drizzle_orm_1.sql) `
+      SELECT b.*, count(*) OVER () AS total_count
+      FROM bookings b
+      WHERE ${where}
+      ORDER BY ${this.bookingOrder(filters.sort ?? "NEWEST")}
+      LIMIT ${limit} OFFSET ${offset}
+    `));
+        return {
+            items: rows.map(toBookingRow),
+            total: rows.length > 0 ? Number(rows[0].total_count) : 0,
+        };
+    }
+    bookingOrder(sort) {
+        switch (sort) {
+            case "STAY_DATE_ASC":
+                return (0, drizzle_orm_1.sql) `b.check_in ASC, b.created_at DESC`;
+            case "STAY_DATE_DESC":
+                return (0, drizzle_orm_1.sql) `b.check_in DESC, b.created_at DESC`;
+            case "ACTION_REQUIRED":
+                return (0, drizzle_orm_1.sql) `
+          CASE b.status
+            WHEN 'PENDING_HOST_APPROVAL' THEN 0
+            WHEN 'PENDING_PAYMENT' THEN 1
+            ELSE 2
+          END ASC,
+          b.host_response_deadline_at ASC NULLS LAST,
+          b.created_at DESC
+        `;
+            default:
+                return (0, drizzle_orm_1.sql) `b.created_at DESC`;
+        }
     }
     async findForHost(hostId, bookingId) {
         const booking = await this.loadOwned(this.database.db, hostId, bookingId, false);
@@ -508,6 +577,23 @@ let BookingsService = BookingsService_1 = class BookingsService {
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.bookingHolds.bookingId, booking.id), (0, drizzle_orm_1.eq)(schema_1.bookingHolds.status, "ACTIVE")))
             .limit(1);
         return { booking, holdExpiresAt: hold?.expiresAt ?? null };
+    }
+    async upcomingConfirmedIds(propertyId) {
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = await this.database.db
+            .select({ id: schema_1.bookings.id })
+            .from(schema_1.bookings)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.bookings.propertyId, propertyId), (0, drizzle_orm_1.eq)(schema_1.bookings.status, "CONFIRMED"), (0, drizzle_orm_1.gte)(schema_1.bookings.checkOut, today)));
+        return rows.map((row) => row.id);
+    }
+    async activeHoldsFor(bookingIds) {
+        if (bookingIds.length === 0)
+            return new Map();
+        const rows = await this.database.db
+            .select({ bookingId: schema_1.bookingHolds.bookingId, expiresAt: schema_1.bookingHolds.expiresAt })
+            .from(schema_1.bookingHolds)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.bookingHolds.bookingId, bookingIds), (0, drizzle_orm_1.eq)(schema_1.bookingHolds.status, "ACTIVE")));
+        return new Map(rows.map((row) => [row.bookingId, row.expiresAt]));
     }
     async findActiveHold(bookingId) {
         const [hold] = await this.database.db
@@ -562,6 +648,44 @@ exports.BookingsService = BookingsService = BookingsService_1 = __decorate([
     __param(2, (0, common_1.Inject)(object_storage_1.OBJECT_STORAGE)),
     __metadata("design:paramtypes", [Object, availability_service_1.AvailabilityService, Object, outbox_service_1.OutboxService,
         guest_access_service_1.GuestAccessService,
+        stay_schedule_canceller_1.StayScheduleCanceller,
         config_1.ConfigService])
 ], BookingsService);
+function toBookingRow(row) {
+    return {
+        id: row.id,
+        publicReference: row.public_reference,
+        propertyId: row.property_id,
+        hostId: row.host_id,
+        bookingMode: row.booking_mode,
+        status: row.status,
+        statusReason: (row.status_reason ?? null),
+        checkIn: row.check_in,
+        checkOut: row.check_out,
+        adults: row.adults,
+        children: row.children,
+        guestUserId: (row.guest_user_id ?? null),
+        guestName: row.guest_name,
+        guestEmail: row.guest_email,
+        guestPhone: (row.guest_phone ?? null),
+        propertyTitleSnapshot: row.property_title_snapshot,
+        propertyCitySnapshot: (row.property_city_snapshot ?? null),
+        coverImageUrlSnapshot: (row.cover_image_url_snapshot ?? null),
+        accommodationAmountMinor: row.accommodation_amount_minor,
+        cleaningFeeAmountMinor: row.cleaning_fee_amount_minor,
+        serviceFeeAmountMinor: row.service_fee_amount_minor,
+        taxAmountMinor: row.tax_amount_minor,
+        discountAmountMinor: row.discount_amount_minor,
+        totalAmountMinor: row.total_amount_minor,
+        currency: row.currency,
+        hostResponseDeadlineAt: (0, pg_values_1.toDateOrNull)(row.host_response_deadline_at),
+        createdAt: (0, pg_values_1.toDate)(row.created_at),
+        updatedAt: (0, pg_values_1.toDate)(row.updated_at),
+        hostRespondedAt: (0, pg_values_1.toDateOrNull)(row.host_responded_at),
+        cancelledAt: (0, pg_values_1.toDateOrNull)(row.cancelled_at),
+        expiredAt: (0, pg_values_1.toDateOrNull)(row.expired_at),
+        confirmedAt: (0, pg_values_1.toDateOrNull)(row.confirmed_at),
+        sensitiveAccessRevealedAt: (0, pg_values_1.toDateOrNull)(row.sensitive_access_revealed_at),
+    };
+}
 //# sourceMappingURL=bookings.service.js.map

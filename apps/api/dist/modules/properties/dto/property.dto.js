@@ -178,6 +178,9 @@ class PropertyDetailDto extends PropertySummaryDto {
     baseDailyRateAmountMinor;
     available;
     bookingMode;
+    checkInTime;
+    checkOutTime;
+    houseRules;
 }
 exports.PropertyDetailDto = PropertyDetailDto;
 __decorate([
@@ -215,6 +218,22 @@ __decorate([
     }),
     __metadata("design:type", String)
 ], PropertyDetailDto.prototype, "bookingMode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: "15:00", description: "Zameldowanie od, czas lokalny obiektu" }),
+    __metadata("design:type", String)
+], PropertyDetailDto.prototype, "checkInTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: "11:00", description: "Wymeldowanie do, czas lokalny obiektu" }),
+    __metadata("design:type", String)
+], PropertyDetailDto.prototype, "checkOutTime", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        type: String,
+        nullable: true,
+        description: "Zasady domu — jedyny publiczny fragment informacji o pobycie",
+    }),
+    __metadata("design:type", Object)
+], PropertyDetailDto.prototype, "houseRules", void 0);
 class SearchResponseDto {
     items;
     total;

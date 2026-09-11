@@ -1,8 +1,12 @@
+import type { HostAllCalendarEvent } from "@rezervio/api-client";
 import { describe, expect, it } from "vitest";
 
 import {
   addDays,
   blockFor,
+  daysBetween,
+  endOfMonth,
+  eventFor,
   buildMonthGrid,
   isDrawing,
   monthLabel,
@@ -159,5 +163,54 @@ describe("month helpers", () => {
 
   it("adds days across a month boundary", () => {
     expect(addDays("2026-09-30", 1)).toBe("2026-10-01");
+  });
+});
+
+describe("unified calendar helpers", () => {
+  const events: HostAllCalendarEvent[] = [
+    {
+      id: "1",
+      type: "BOOKING",
+      startDate: "2026-09-10",
+      endDate: "2026-09-14",
+      label: "Rezerwacja",
+      sourceLabel: null,
+      bookingReference: "RZV-1",
+      guestName: "Jan Kowalski",
+      expiresAt: null,
+    },
+    {
+      id: "2",
+      type: "HOST_BLOCK",
+      startDate: "2026-09-20",
+      endDate: "2026-09-22",
+      label: "Ręczna blokada",
+      sourceLabel: null,
+      bookingReference: null,
+      guestName: null,
+      expiresAt: null,
+    },
+  ];
+
+  it("lists every day of a half-open range", () => {
+    expect(daysBetween("2026-09-01", "2026-09-04")).toEqual([
+      "2026-09-01",
+      "2026-09-02",
+      "2026-09-03",
+    ]);
+    expect(daysBetween("2026-09-01", "2026-09-01")).toEqual([]);
+  });
+
+  it("spans a whole month", () => {
+    expect(daysBetween("2026-09-01", endOfMonth("2026-09-01"))).toHaveLength(30);
+    expect(endOfMonth("2026-09-14")).toBe("2026-10-01");
+  });
+
+  it("finds the event covering a day, end date exclusive", () => {
+    expect(eventFor("2026-09-10", events)?.id).toBe("1");
+    expect(eventFor("2026-09-13", events)?.id).toBe("1");
+    // Check-out day is free again.
+    expect(eventFor("2026-09-14", events)).toBeNull();
+    expect(eventFor("2026-09-21", events)?.type).toBe("HOST_BLOCK");
   });
 });

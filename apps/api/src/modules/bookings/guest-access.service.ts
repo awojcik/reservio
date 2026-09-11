@@ -9,6 +9,26 @@ import { bookingGuestAccessTokens, bookings } from "../../infrastructure/databas
 
 const TOKEN_BYTES = 32;
 
+/**
+ * Short-lived cookie holding the Guest access token, so the secret leaves the
+ * URL after the first visit and does not sit in browser history or a Referer
+ * header (milestone 05 §16).
+ */
+export const GUEST_COOKIE = "rezervio_booking_access";
+export const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+
+/** A request that has been through @fastify/cookie. */
+export type CookieRequest = {
+  query?: unknown;
+  cookies?: Record<string, string | undefined>;
+};
+
+/** The token from the cookie, or from the link the Guest just followed. */
+export function guestTokenFrom(request: CookieRequest): string | undefined {
+  const query = (request.query ?? {}) as { token?: string };
+  return query.token ?? request.cookies?.[GUEST_COOKIE];
+}
+
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }

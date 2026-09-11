@@ -9,27 +9,50 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoginRateLimiter = void 0;
 const common_1 = require("@nestjs/common");
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 10;
+const MAX_PER_IDENTIFIER = 10;
+const MAX_PER_IP = 30;
+const COOLDOWN_MS = 15 * 60 * 1000;
 let LoginRateLimiter = class LoginRateLimiter {
-    attempts = new Map();
-    consume(key) {
+    identifiers = new Map();
+    addresses = new Map();
+    blocked(email, ip) {
+        return (this.tripped(this.identifiers, email, MAX_PER_IDENTIFIER) ||
+            this.tripped(this.addresses, ip, MAX_PER_IP));
+    }
+    recordFailure(email, ip) {
+        this.bump(this.identifiers, email);
+        this.bump(this.addresses, ip);
+    }
+    reset(email) {
+        this.identifiers.delete(email);
+    }
+    tripped(buckets, key, max) {
+        const entry = buckets.get(key);
+        if (!entry)
+            return false;
+        if (entry.resetAt <= Date.now()) {
+            buckets.delete(key);
+            return false;
+        }
+        return entry.count >= max;
+    }
+    bump(buckets, key) {
         const now = Date.now();
-        const entry = this.attempts.get(key);
+        const entry = buckets.get(key);
         if (!entry || entry.resetAt <= now) {
-            this.attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-            this.sweep(now);
-            return true;
+            buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
+            this.sweep(buckets, now);
+            return;
         }
         entry.count += 1;
-        return entry.count <= MAX_ATTEMPTS;
+        if (entry.count === MAX_PER_IDENTIFIER || entry.count === MAX_PER_IP) {
+            entry.resetAt = now + COOLDOWN_MS;
+        }
     }
-    reset(key) {
-        this.attempts.delete(key);
-    }
-    sweep(now) {
-        for (const [key, entry] of this.attempts) {
+    sweep(buckets, now) {
+        for (const [key, entry] of buckets) {
             if (entry.resetAt <= now)
-                this.attempts.delete(key);
+                buckets.delete(key);
         }
     }
 };

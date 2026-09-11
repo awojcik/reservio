@@ -126,6 +126,36 @@ describe("calendar-sync queue", () => {
     expect(await queue.getWaitingCount()).toBe(1);
   });
 
+  /**
+   * The dedup covers work still in flight — not work that already finished.
+   *
+   * BullMQ keeps completed and failed jobs, and treats `add` with a known id
+   * as a no-op, so a naive stable job id would make the *first* sync of a
+   * calendar its last: every later "Sync now", from the Host panel or from
+   * admin support, would silently do nothing (milestone 11 §10).
+   */
+  it("syncs again after the previous job finished", async () => {
+    const calendarId = await newCalendar();
+    await worker.enqueue(calendarId, true);
+
+    const running = worker.start();
+    try {
+      await waitFor(async () => {
+        const [row] = await database.db
+          .select()
+          .from(externalCalendars)
+          .where(eq(externalCalendars.id, calendarId));
+        return row.lastSyncSucceededAt !== null;
+      });
+    } finally {
+      await running.close();
+    }
+
+    // The job is completed and its id is taken; asking again must still work.
+    await worker.enqueue(calendarId, true);
+    expect(await queue.getWaitingCount()).toBe(1);
+  });
+
   it("processes a queued job and records the result", async () => {
     const calendarId = await newCalendar();
     await worker.enqueue(calendarId, true);
@@ -205,10 +235,16 @@ describe("calendar-sync queue", () => {
     await calendars.update(property.id, disabledId, { status: "DISABLED" });
 
     await queue.obliterate({ force: true });
-    const { enqueued } = await worker.enqueueDueCalendars();
+    await worker.enqueueDueCalendars();
 
-    expect(enqueued).toBe(1);
-    const [job] = await queue.getWaiting();
-    expect(job.data.externalCalendarId).toBe(activeId);
+    /*
+     * Scoped to the two calendars this test made. The sweep is deliberately
+     * global — it looks at every Host's feeds — so asserting on the total
+     * would only be testing that the developer's database is empty.
+     */
+    const queued = (await queue.getWaiting()).map((job) => job.data.externalCalendarId);
+
+    expect(queued).toContain(activeId);
+    expect(queued).not.toContain(disabledId);
   });
 });

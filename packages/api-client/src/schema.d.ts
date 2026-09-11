@@ -571,7 +571,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Rezerwacje obiektów gospodarza */
+        /**
+         * Rezerwacje obiektów gospodarza
+         * @description Filtrowanie po statusie, obiekcie i zakresie dat, wyszukiwanie po numerze, imieniu i emailu gościa, sortowanie i paginacja.
+         */
         get: operations["HostBookingsController_list"];
         put?: never;
         post?: never;
@@ -788,6 +791,381 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bookings/{reference}/payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rozpoczęcie płatności
+         * @description Tworzy albo wznawia płatność za rezerwację oczekującą na zapłatę. Kwota pochodzi wyłącznie ze snapshotu rezerwacji — dane z przeglądarki są ignorowane.
+         */
+        post: operations["GuestPaymentsController_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/webhooks/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook Stripe
+         * @description Weryfikuje podpis na surowym ciele żądania. Powtórzone zdarzenie zwraca 200 i nie wywołuje drugiego efektu.
+         */
+        post: operations["WebhooksController_stripe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/payments/connect-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Utworzenie konta rozliczeniowego
+         * @description Idempotentne — powtórzone wywołanie zwraca istniejące konto.
+         */
+        post: operations["HostPaymentsController_createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/payments/onboarding-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link do konfiguracji płatności
+         * @description Konfigurację prowadzi dostawca płatności. Rezervio nie zbiera danych weryfikacyjnych.
+         */
+        post: operations["HostPaymentsController_onboardingLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/payments/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stan gotowości do przyjmowania płatności
+         * @description Odświeża stan u dostawcy, żeby Host widział skutek konfiguracji od razu.
+         */
+        get: operations["HostPaymentsController_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/properties/{id}/stay-information": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Informacje dla gościa
+         * @description Konfigurowane raz dla obiektu, nie kopiowane do każdej rezerwacji.
+         */
+        get: operations["HostStayController_stayInformation"];
+        /**
+         * Zapis informacji dla gościa
+         * @description Godziny są lokalne dla obiektu. Zmiana przelicza zaplanowane powiadomienia dla nadchodzących rezerwacji.
+         */
+        put: operations["HostStayController_saveStayInformation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/properties/{id}/sensitive-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dane dostępu do obiektu
+         * @description Przechowywane zaszyfrowane. Gospodarz widzi własne dane w czytelnej formie.
+         */
+        get: operations["HostStayController_sensitiveAccess"];
+        /** Zapis danych dostępu */
+        put: operations["HostStayController_saveSensitiveAccess"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/bookings/{id}/sensitive-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Kiedy gość zobaczy dane dostępu */
+        get: operations["HostStayController_bookingAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/bookings/{id}/sensitive-access/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Udostępnij dane dostępu teraz
+         * @description Działa tylko dla tej rezerwacji i nie zmienia domyślnego ustawienia obiektu. Powtórne wywołanie niczego nie zmienia ani nie wysyła drugiego emaila.
+         */
+        post: operations["HostStayController_reveal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/payments/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Podsumowanie finansów gospodarza
+         * @description Salda są wyliczane z rozliczeń, nie przechowywane — nie ma osobnej kolumny z saldem, która mogłaby się rozjechać.
+         */
+        get: operations["HostSettlementsController_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/settlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historia rozliczeń */
+        get: operations["HostSettlementsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/settlements/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pojedyncze rozliczenie */
+        get: operations["HostSettlementsController_findOne"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/settlements/{id}/release-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zwolnij środki teraz (tylko środowisko testowe)
+         * @description Pomija wyłącznie oczekiwanie na zegar. Wszystkie pozostałe warunki — status rezerwacji, płatność, brak zwrotu — są sprawdzane normalnie.
+         */
+        post: operations["HostSettlementsController_releaseNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Wypłaty na konto bankowe
+         * @description Wypłaty wykonuje dostawca według harmonogramu konta. Rezervio je obserwuje, nie inicjuje.
+         */
+        get: operations["HostSettlementsController_payouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bookings/{reference}/stay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Szczegóły pobytu
+         * @description Godziny, instrukcje i stan danych dostępu. Sekret pojawia się w odpowiedzi dopiero po terminie udostępnienia — frontend niczego nie ukrywa.
+         */
+        get: operations["GuestStayController_stayDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bookings/{reference}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rozmowa z gospodarzem
+         * @description Kursorowa paginacja: najnowsze najpierw, starsze na żądanie.
+         */
+        get: operations["GuestStayController_messages"];
+        put?: never;
+        /** Wiadomość do gospodarza */
+        post: operations["GuestStayController_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/bookings/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rozmowa z gościem */
+        get: operations["HostMessagingController_messages"];
+        put?: never;
+        /** Wiadomość do gościa */
+        post: operations["HostMessagingController_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pulpit operacyjny gospodarza
+         * @description Jedno żądanie zwraca wszystko, co pulpit pokazuje. To projekcja odczytowa liczona z istniejących tabel — nie ma osobnego źródła prawdy dla pulpitu.
+         */
+        get: operations["HostOperationsController_dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kalendarz wszystkich obiektów
+         * @description Rezerwacje, aktywne blokady tymczasowe, blokady ręczne i terminy z kalendarzy zewnętrznych — pogrupowane po obiekcie. Wygasłe blokady nie są zwracane.
+         */
+        get: operations["HostOperationsController_calendarFor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -796,12 +1174,789 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Stan usługi
-         * @description Weryfikuje połączenie z PostgreSQL. Niedostępna baza to 503, nie 200.
+         * Liveness
+         * @description Sam proces. Nie odpytuje bazy ani Redisa — restart instancji nie naprawia niedostępnej zależności.
          */
         get: operations["HealthController_check"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description PostgreSQL i Redis. 503, gdy którakolwiek zależność nie odpowiada — instancja nie powinna wtedy dostawać ruchu.
+         */
+        get: operations["HealthController_ready"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Integracje gospodarza
+         * @description Każdy dostawca, jego stan i ostatnie synchronizacje. Klucze API nigdy nie są zwracane.
+         */
+        get: operations["HostIntegrationsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/hostaway/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Połącz Hostaway
+         * @description Weryfikuje dane u dostawcy, zapisuje je zaszyfrowane i zwraca hasło webhooka — jeden raz.
+         */
+        post: operations["HostIntegrationsController_connectHostaway"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/{id}/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listingi u dostawcy
+         * @description Propozycja dopasowania jest wyłącznie po dokładnej nazwie — mapowanie zatwierdza Host.
+         */
+        get: operations["HostIntegrationsController_listings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/{id}/mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zmapuj obiekt
+         * @description Jawna decyzja Hosta. Jeden obiekt do jednego listingu i odwrotnie.
+         */
+        post: operations["HostIntegrationsController_createMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/{id}/mappings/{mappingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Usuń mapowanie
+         * @description Zatrzymuje przyszłe synchronizacje. Blokady, które już powstały, zostają — opisują rezerwacje, które nadal istnieją u dostawcy.
+         */
+        delete: operations["HostIntegrationsController_removeMapping"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Synchronizuj teraz
+         * @description Zadanie trafia do kolejki — feed nie jest pobierany w wątku żądania. Powtórzone kliknięcia są deduplikowane.
+         */
+        post: operations["HostIntegrationsController_syncNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/integrations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Rozłącz
+         * @description Zatrzymuje synchronizację. Mapowania i blokady zostają — usunięcie ich zwolniłoby terminy, które ktoś już sprzedał.
+         */
+        delete: operations["HostIntegrationsController_disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/webhooks/hostaway/{connectionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Webhook Hostaway
+         * @description Hostaway nie podpisuje webhooków — jego kontrakt przewiduje wyłącznie Basic Auth. Zdarzenie jest przyjmowane i przetwarzane asynchronicznie; powtórka zwraca 200 i nie wywołuje drugiego efektu.
+         */
+        post: operations["HostawayWebhookController_receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/channex/test_connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Channex: test połączenia
+         * @description Kontraktowy healthcheck kanału. Zwraca { success: true } zgodnie ze specyfikacją Open Channel API.
+         */
+        get: operations["ChannexChannelController_testConnection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/channex/mapping_details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Channex: dane do mapowania
+         * @description Jeden room type i jeden rate plan na Property — Rezervio nie ma pokoi ani allotmentu.
+         */
+        get: operations["ChannexChannelController_mappingDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/channels/channex/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Channex: zmiany dostępności i restrykcji
+         * @description Przyjmowane i stosowane pod tym samym advisory lockiem Property, co każdy inny zapis dostępności. Powtórzone `request_id` nie tworzy drugiej blokady.
+         */
+        post: operations["ChannexChannelController_receiveChanges"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/host/geocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Znajdź współrzędne dla adresu
+         * @description Zwraca punkt razem z precyzją dopasowania. `found: false` znaczy, że dostawca odpowiedział, ale nie zna takiego adresu — to nie jest błąd.
+         */
+        post: operations["HostGeocodingController_geocode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pulpit administracyjny
+         * @description Problemy operacyjne, ostatnie rezerwacje, nieudane zadania i stan rekoncyliacji. Jedno żądanie, kilka równoległych zapytań — bez N+1.
+         */
+        get: operations["AdminController_dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Połączenia z PMS i channel managerami
+         * @description Stan każdego połączenia, liczby rezerwacji w obie strony i nieudane synchronizacje. Bez danych dostępowych w żadnej postaci.
+         */
+        get: operations["AdminController_integrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Globalne wyszukiwanie
+         * @description Numer rezerwacji, email, nazwa obiektu albo identyfikator płatności, zwrotu, rozliczenia, przelewu i wypłaty.
+         */
+        get: operations["AdminController_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rezerwacje
+         * @description Filtrowanie i paginacja po stronie serwera.
+         */
+        get: operations["AdminController_bookings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/bookings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pełen cykl życia rezerwacji
+         * @description Płatność, zwrot, rozliczenie, przelew, wypłata, blokada terminu, powiadomienia i audyt — w jednym miejscu.
+         */
+        get: operations["AdminController_booking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Konto użytkownika
+         * @description Bez hasha hasła i bez tokenów sesji — widoczna jest wyłącznie liczba sesji.
+         */
+        get: operations["AdminController_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/hosts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gospodarz i jego finanse */
+        get: operations["AdminController_host"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/properties/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obiekt
+         * @description Kod do drzwi pozostaje zaszyfrowany — widać wyłącznie, czy został skonfigurowany.
+         */
+        get: operations["AdminController_property"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Problemy operacyjne
+         * @description Read model nad istniejącymi tabelami. Problem znika w chwili, w której znika jego przyczyna — nie ma ręcznie zamykanej listy incydentów.
+         */
+        get: operations["AdminController_operations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kolejki i nieudane zadania
+         * @description Rejestr typów zadań oraz zadania, które wyczerpały ponowienia. Niedostępny Redis jest widoczny, a nie ukryty.
+         */
+        get: operations["AdminController_jobsOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dostarczenia powiadomień
+         * @description Nieudane najpierw.
+         */
+        get: operations["AdminController_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ical": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kalendarze zewnętrzne
+         * @description Najgorsze najpierw.
+         */
+        get: operations["AdminController_calendars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tryb Stripe
+         * @description Rezervio działa wyłącznie w sandboxie. Klucz live zatrzymuje start procesu, więc tryb LIVE nie może się tu pojawić.
+         */
+        get: operations["AdminController_stripe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stan rekoncyliacji
+         * @description Ostatni przebieg, co zrobił i ile rozbieżności pozostało nierozwiązanych.
+         */
+        get: operations["AdminController_reconciliation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audyt akcji administracyjnych
+         * @description Kto, co i kiedy uruchomił. Bez sekretów w metadanych.
+         */
+        get: operations["AdminController_auditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-notification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów powiadomienie
+         * @description Wraca do zwykłej kolejki powiadomień. Klucz deduplikacji nadal obowiązuje, więc wysłane powiadomienie nie zostanie wysłane drugi raz.
+         */
+        post: operations["AdminActionsController_retryNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów zwrot
+         * @description Wykonuje zapisaną wcześniej decyzję o zwrocie. Klucz idempotency u dostawcy pochodzi z identyfikatora zwrotu, więc pieniądze nie wrócą dwa razy.
+         */
+        post: operations["AdminActionsController_retryRefund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów przelew do gospodarza
+         * @description Ta sama komenda, którą wykonuje zadanie po zwolnieniu środków. Częściowy unikalny indeks nadal dopuszcza jeden żywy przelew na rozliczenie.
+         */
+        post: operations["AdminActionsController_retryTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/ical-resync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów synchronizację kalendarza
+         * @description Dodaje to samo zadanie, co okresowy sweep. Deduplikowane po identyfikatorze.
+         */
+        post: operations["AdminActionsController_resyncCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/refresh-connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Odśwież stan konta Connect
+         * @description Pyta dostawcę o rzeczywisty stan konta gospodarza. Rezervio nie przechowuje danych KYC ani numerów kont.
+         */
+        post: operations["AdminActionsController_refreshConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uruchom rekoncyliację
+         * @description Ten sam przebieg, który chodzi automatycznie: zwalnia należne rozliczenia, dopytuje dostawcę o zawieszone przelewy, ponawia nieudane i odczytuje wypłaty.
+         */
+        post: operations["AdminActionsController_reconcile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-integration-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów synchronizację integracji
+         * @description To samo zadanie, które dodaje okresowy sweep i przycisk gospodarza. Deduplikowane po identyfikatorze połączenia.
+         */
+        post: operations["AdminActionsController_retryIntegrationSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/reconcile-integration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uzgodnij integrację ze stanem u dostawcy
+         * @description Porównuje aktywne rezerwacje zewnętrzne z tym, co dostawca mówi teraz, i zwalnia terminy po anulowaniach, których webhook nie dotarł.
+         */
+        post: operations["AdminActionsController_reconcileIntegration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/disable-integration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wyłącz integrację
+         * @description Zatrzymuje synchronizację. Mapowania i blokady zostają — opisują rezerwacje, które nadal istnieją u dostawcy.
+         */
+        post: operations["AdminActionsController_disableIntegration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-outbound-reservation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów przekazanie rezerwacji do systemu gospodarza
+         * @description Ta sama komenda, którą wykonuje zadanie po potwierdzeniu rezerwacji. Roszczenie na mapowaniu nadal obowiązuje, więc nie powstanie druga rezerwacja u dostawcy.
+         */
+        post: operations["AdminActionsController_retryOutbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions/retry-job": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ponów nieudane zadanie
+         * @description BullMQ ponawia to samo zadanie z tym samym payloadem. Idempotencję zapewniają te same mechanizmy, co przy pierwszym uruchomieniu.
+         */
+        post: operations["AdminActionsController_retryJob"];
         delete?: never;
         options?: never;
         head?: never;
@@ -948,7 +2103,7 @@ export interface components {
         };
         BookingTimelineEntryDto: {
             /** @enum {string} */
-            type: "BOOKING_CREATED" | "HOST_ACCEPTED" | "HOST_REJECTED" | "REQUEST_EXPIRED" | "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOLD_CREATED" | "HOLD_EXPIRED" | "HOLD_RELEASED";
+            type: "BOOKING_CREATED" | "HOST_ACCEPTED" | "HOST_REJECTED" | "REQUEST_EXPIRED" | "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOLD_CREATED" | "HOLD_EXPIRED" | "HOLD_RELEASED" | "HOLD_CONVERTED" | "PAYMENT_STARTED" | "PAYMENT_SUCCEEDED" | "PAYMENT_FAILED" | "BOOKING_CONFIRMED" | "REFUND_REQUESTED" | "REFUND_SUCCEEDED" | "STAY_INSTRUCTIONS_SENT" | "SENSITIVE_ACCESS_REVEALED" | "CHECKOUT_REMINDER_SENT" | "BOOKING_COMPLETED" | "MESSAGE_SENT" | "SETTLEMENT_CREATED" | "SETTLEMENT_RELEASED" | "SETTLEMENT_CANCELLED" | "HOST_TRANSFER_SUCCEEDED" | "HOST_TRANSFER_REVERSED";
             /** @enum {string} */
             actorType: "GUEST" | "HOST" | "SYSTEM";
             /** @example 2026-09-01T10:15:00.000Z */
@@ -965,6 +2120,19 @@ export interface components {
              * @example false
              */
             claimed: boolean;
+            /**
+             * @description Czy można rozpocząć albo ponowić płatność. Wymaga aktywnej blokady terminu — po jej wygaśnięciu ponowienie nie jest możliwe.
+             * @example true
+             */
+            canPay: boolean;
+        };
+        PaymentStateDto: {
+            /** @enum {string|null} */
+            status: "CREATED" | "PROCESSING" | "REQUIRES_ACTION" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "PARTIALLY_REFUNDED" | null;
+            /** @description Komunikat od dostawcy płatności, jeśli płatność się nie powiodła */
+            failureMessage: string | null;
+            /** @description Czy dla tej płatności zlecono zwrot */
+            refunded: boolean;
         };
         TripDto: {
             /** @example RZV-7KD2M9QP */
@@ -975,7 +2143,7 @@ export interface components {
              * @example HOLD_EXPIRED
              * @enum {string|null}
              */
-            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | null;
+            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | "PAYMENT_AFTER_HOLD_EXPIRY" | null;
             /** @enum {string} */
             bookingMode: "REQUEST_TO_BOOK" | "INSTANT_BOOK";
             /** @example Apartament nad morzem */
@@ -1003,6 +2171,8 @@ export interface components {
             createdAt: string;
             timeline: components["schemas"]["BookingTimelineEntryDto"][];
             allowedActions: components["schemas"]["BookingActionsDto"];
+            /** @description Stan płatności; null, dopóki płatność nie została rozpoczęta */
+            payment: components["schemas"]["PaymentStateDto"] | null;
             /** @enum {string} */
             category: "PENDING" | "UPCOMING" | "PAST" | "CANCELLED";
             /** @example Gdańsk */
@@ -1035,7 +2205,7 @@ export interface components {
              */
             endDate: string;
             /** @enum {string} */
-            sourceType: "HOST_BLOCK" | "EXTERNAL_CALENDAR" | "BOOKING" | "BOOKING_HOLD" | "MAINTENANCE";
+            sourceType: "HOST_BLOCK" | "EXTERNAL_CALENDAR" | "BOOKING" | "BOOKING_HOLD" | "MAINTENANCE" | "EXTERNAL_PROVIDER";
             /** @example Ręczna blokada */
             sourceLabel: string;
             /** @description Nazwa kalendarza zewnętrznego; null dla blokad ręcznych */
@@ -1205,6 +2375,18 @@ export interface components {
              * @enum {string}
              */
             bookingMode: "REQUEST_TO_BOOK" | "INSTANT_BOOK";
+            /**
+             * @description Zameldowanie od, czas lokalny obiektu
+             * @example 15:00
+             */
+            checkInTime: string;
+            /**
+             * @description Wymeldowanie do, czas lokalny obiektu
+             * @example 11:00
+             */
+            checkOutTime: string;
+            /** @description Zasady domu — jedyny publiczny fragment informacji o pobycie */
+            houseRules: string | null;
         };
         HostPropertyImageDto: {
             /** Format: uuid */
@@ -1477,7 +2659,7 @@ export interface components {
              * @example HOLD_EXPIRED
              * @enum {string|null}
              */
-            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | null;
+            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | "PAYMENT_AFTER_HOLD_EXPIRY" | null;
             /** @enum {string} */
             bookingMode: "REQUEST_TO_BOOK" | "INSTANT_BOOK";
             /** @example Apartament nad morzem */
@@ -1505,6 +2687,8 @@ export interface components {
             createdAt: string;
             timeline: components["schemas"]["BookingTimelineEntryDto"][];
             allowedActions: components["schemas"]["BookingActionsDto"];
+            /** @description Stan płatności; null, dopóki płatność nie została rozpoczęta */
+            payment: components["schemas"]["PaymentStateDto"] | null;
         };
         GuestAccessDto: {
             /** @description Token z linku w emailu. Wymieniany na cookie sesji gościa. */
@@ -1519,7 +2703,7 @@ export interface components {
              * @example HOLD_EXPIRED
              * @enum {string|null}
              */
-            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | null;
+            statusReason: "GUEST_CANCELLED" | "HOST_CANCELLED" | "HOST_REJECTED" | "HOST_RESPONSE_TIMEOUT" | "HOLD_EXPIRED" | "AVAILABILITY_LOST" | "PAYMENT_AFTER_HOLD_EXPIRY" | null;
             /** @enum {string} */
             bookingMode: "REQUEST_TO_BOOK" | "INSTANT_BOOK";
             /** @example Apartament nad morzem */
@@ -1547,6 +2731,8 @@ export interface components {
             createdAt: string;
             timeline: components["schemas"]["BookingTimelineEntryDto"][];
             allowedActions: components["schemas"]["BookingActionsDto"];
+            /** @description Stan płatności; null, dopóki płatność nie została rozpoczęta */
+            payment: components["schemas"]["PaymentStateDto"] | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -1557,6 +2743,16 @@ export interface components {
             guestEmail: string;
             guestPhone: string | null;
             hostRespondedAt: string | null;
+        };
+        HostBookingsPageDto: {
+            items: components["schemas"]["HostBookingDto"][];
+            /**
+             * @description Liczba wszystkich pasujących rezerwacji
+             * @example 42
+             */
+            total: number;
+            /** @example true */
+            hasMore: boolean;
         };
         ExternalCalendarDto: {
             /** Format: uuid */
@@ -1625,9 +2821,1196 @@ export interface components {
             /** @example 2026-09-01T10:15:00.000Z */
             createdAt: string;
         };
+        PaymentIntentDto: {
+            /** Format: uuid */
+            paymentId: string;
+            /** @description Sekret potrzebny do potwierdzenia płatności w przeglądarce. Nie jest logowany ani przechowywany. */
+            clientSecret: string;
+            /** @enum {string} */
+            status: "CREATED" | "PROCESSING" | "REQUIRES_ACTION" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "PARTIALLY_REFUNDED";
+            /** @example 192000 */
+            amountMinor: number;
+            /** @example PLN */
+            currency: string;
+            /** @description Do kiedy termin jest zablokowany */
+            expiresAt: string | null;
+        };
+        WebhookAckDto: {
+            /** @example true */
+            received: boolean;
+            /**
+             * @description Zdarzenie było już przyjęte — nie wywołało drugiego efektu.
+             * @example false
+             */
+            duplicate: boolean;
+        };
+        HostPaymentStatusDto: {
+            /** @example STRIPE */
+            provider: string;
+            /** @enum {string} */
+            readiness: "NOT_STARTED" | "IN_PROGRESS" | "READY" | "RESTRICTED";
+            chargesEnabled: boolean;
+            payoutsEnabled: boolean;
+            detailsSubmitted: boolean;
+            /** @description Czy konto rozliczeniowe w ogóle istnieje */
+            connected: boolean;
+        };
+        OnboardingLinkDto: {
+            /** @description Adres konfiguracji po stronie dostawcy */
+            url: string;
+            /** @example 2026-09-01T10:15:00.000Z */
+            expiresAt: string;
+        };
+        StayInformationDto: {
+            /**
+             * @description Godzina lokalna obiektu, nie UTC
+             * @example 15:00
+             */
+            checkInTime: string;
+            /** @example 11:00 */
+            checkOutTime: string;
+            arrivalInstructions?: string;
+            parkingInstructions?: string;
+            wifiName?: string;
+            wifiPassword?: string;
+            houseRules?: string;
+            departureInstructions?: string;
+            emergencyContact?: string;
+            /**
+             * @example 24
+             * @enum {number}
+             */
+            instructionsSendOffsetHours: 24 | 48 | 72;
+            /** Format: uuid */
+            propertyId: string;
+            /** @example Europe/Warsaw */
+            timeZone: string;
+            /** @description Czy gospodarz zapisał już te informacje */
+            configured: boolean;
+        };
+        UpdateStayInformationDto: {
+            /**
+             * @description Godzina lokalna obiektu, nie UTC
+             * @example 15:00
+             */
+            checkInTime: string;
+            /** @example 11:00 */
+            checkOutTime: string;
+            arrivalInstructions?: string;
+            parkingInstructions?: string;
+            wifiName?: string;
+            wifiPassword?: string;
+            houseRules?: string;
+            departureInstructions?: string;
+            emergencyContact?: string;
+            /**
+             * @example 24
+             * @enum {number}
+             */
+            instructionsSendOffsetHours: 24 | 48 | 72;
+        };
+        SensitiveAccessDto: {
+            accessInstructions?: string;
+            /** @description Kod do drzwi albo keyboxa */
+            accessCode?: string;
+            keyboxLocation?: string;
+            /**
+             * @example 6
+             * @enum {number}
+             */
+            revealOffsetHours: 6 | 12 | 24;
+            /** Format: uuid */
+            propertyId: string;
+            /** @description Czy cokolwiek zostało zapisane */
+            configured: boolean;
+        };
+        UpdateSensitiveAccessDto: {
+            accessInstructions?: string;
+            /** @description Kod do drzwi albo keyboxa */
+            accessCode?: string;
+            keyboxLocation?: string;
+            /**
+             * @example 6
+             * @enum {number}
+             */
+            revealOffsetHours: 6 | 12 | 24;
+        };
+        BookingAccessStatusDto: {
+            /** Format: uuid */
+            bookingId: string;
+            /** @description Czy obiekt ma skonfigurowane dane dostępu */
+            configured: boolean;
+            /** @description Czy gość widzi je już teraz */
+            available: boolean;
+            /** @description Termin wynikający z ustawień obiektu */
+            scheduledRevealAt: string | null;
+            /** @description Kiedy gospodarz udostępnił ręcznie */
+            manualRevealAt: string | null;
+            /**
+             * @description Domyślny offset obiektu — ręczne udostępnienie go nie zmienia
+             * @example 6
+             */
+            revealOffsetHours: number;
+        };
+        HostBalanceDto: {
+            /** @example PLN */
+            currency: string;
+            /**
+             * @description Zarobione, czeka na termin zwolnienia
+             * @example 95000
+             */
+            pendingMinor: number;
+            /**
+             * @description Gotowe do przekazania albo w drodze
+             * @example 47500
+             */
+            availableMinor: number;
+            /**
+             * @description Przekazane na konto rozliczeniowe
+             * @example 190000
+             */
+            transferredMinor: number;
+            /**
+             * @description Anulowane po zwrocie dla gościa
+             * @example 0
+             */
+            cancelledMinor: number;
+            /**
+             * @description Cofnięte po zwrocie wykonanym po przekazaniu
+             * @example 0
+             */
+            reversedMinor: number;
+        };
+        HostPayoutDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example 182400 */
+            amountMinor: number;
+            /** @example PLN */
+            currency: string;
+            /** @enum {string} */
+            status: "PENDING" | "IN_TRANSIT" | "PAID" | "FAILED" | "CANCELLED";
+            /** @description Spodziewana data na koncie */
+            arrivalAt: string | null;
+            failureMessage: string | null;
+            /** @example 2026-09-20T10:00:00.000Z */
+            createdAt: string;
+        };
+        HostFinanceSummaryDto: {
+            balance: components["schemas"]["HostBalanceDto"];
+            /** @description Czy konto rozliczeniowe jest gotowe do przyjmowania środków */
+            payoutsReady: boolean;
+            /** @example READY */
+            accountReadiness: string;
+            /** @description Ostatnie wypłaty na konto bankowe */
+            recentPayouts: components["schemas"]["HostPayoutDto"][];
+        };
+        SettlementDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example RZV-7KD2M9QP */
+            bookingReference: string;
+            /** @example Baltic Loft */
+            propertyTitle: string;
+            /** @example 2026-09-12 */
+            checkIn: string;
+            /** @example 2026-09-18 */
+            checkOut: string;
+            /**
+             * @description Ile zapłacił gość
+             * @example 192000
+             */
+            grossAmountMinor: number;
+            /**
+             * @description Prowizja Rezervio ze snapshotu rezerwacji
+             * @example 9600
+             */
+            platformFeeMinor: number;
+            /**
+             * @description Kwota dla gospodarza
+             * @example 182400
+             */
+            hostAmountMinor: number;
+            /** @example PLN */
+            currency: string;
+            /** @enum {string} */
+            status: "PENDING" | "AVAILABLE" | "TRANSFER_PENDING" | "TRANSFERRED" | "CANCELLED" | "FAILED" | "REVERSAL_PENDING" | "REVERSED";
+            /**
+             * @description Kiedy środki się zwolnią
+             * @example 2026-09-13T13:00:00.000Z
+             */
+            releaseAt: string;
+            transferredAt: string | null;
+            /**
+             * @description Stan przekazania środków na konto rozliczeniowe
+             * @enum {string|null}
+             */
+            transferStatus: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "REVERSAL_PENDING" | "REVERSED" | null;
+            /** @description Czy w tym środowisku można zwolnić środki ręcznie */
+            canReleaseNow: boolean;
+        };
+        SettlementsPageDto: {
+            items: components["schemas"]["SettlementDto"][];
+            /** @example 12 */
+            total: number;
+        };
+        GuestSensitiveAccessDto: {
+            /** @description Czy gospodarz w ogóle skonfigurował dane dostępu */
+            configured: boolean;
+            /** @description Czy dane są już dostępne dla gościa */
+            available: boolean;
+            /** @description Kiedy dane zostaną udostępnione; null, gdy już są albo gdy ich nie ma */
+            revealAt: string | null;
+            accessCode: string | null;
+            accessInstructions: string | null;
+            keyboxLocation: string | null;
+            /** @description Czy gospodarz udostępnił dane ręcznie przed czasem */
+            revealedManually: boolean;
+        };
+        StayDetailsDto: {
+            /** @example RZV-7KD2M9QP */
+            reference: string;
+            /** @example Baltic Loft */
+            propertyTitle: string;
+            /** @example Europe/Warsaw */
+            timeZone: string;
+            /** @example 2026-09-12 */
+            checkIn: string;
+            /** @example 2026-09-18 */
+            checkOut: string;
+            /** @example 15:00 */
+            checkInTime: string;
+            /** @example 11:00 */
+            checkOutTime: string;
+            /** @example 2026-09-12T13:00:00.000Z */
+            checkInAt: string;
+            /** @example 2026-09-18T09:00:00.000Z */
+            checkOutAt: string;
+            /**
+             * @description Wyliczane z dat i strefy obiektu — gość niczego nie potwierdza
+             * @enum {string}
+             */
+            phase: "BEFORE_STAY" | "IN_STAY" | "AFTER_STAY";
+            arrivalInstructions: string | null;
+            parkingInstructions: string | null;
+            wifiName: string | null;
+            wifiPassword: string | null;
+            houseRules: string | null;
+            departureInstructions: string | null;
+            emergencyContact: string | null;
+            access: components["schemas"]["GuestSensitiveAccessDto"];
+        };
+        MessageDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            senderType: "GUEST" | "HOST" | "SYSTEM";
+            /**
+             * @description Imię autora do wyświetlenia
+             * @example Jan Kowalski
+             */
+            senderName: string;
+            /** @description Czy tę wiadomość napisał odbiorca tej odpowiedzi */
+            mine: boolean;
+            /** @example Dzień dobry, o której mogę przyjechać? */
+            body: string;
+            /** @example 2026-09-10T09:15:00.000Z */
+            createdAt: string;
+        };
+        MessagesPageDto: {
+            /** @description Od najstarszej do najnowszej w tej stronie */
+            items: components["schemas"]["MessageDto"][];
+            /** @description Kursor do pobrania starszych wiadomości; null, gdy to początek rozmowy */
+            nextCursor: string | null;
+            /** @description Czy są jeszcze starsze wiadomości */
+            hasMore: boolean;
+        };
+        SendMessageDto: {
+            /** @description Zwykły tekst. Nie renderujemy HTML ani Markdown. */
+            body: string;
+        };
+        AttentionItemDto: {
+            /** @enum {string} */
+            type: "BOOKING_REQUEST_PENDING" | "BOOKING_REQUEST_EXPIRING_SOON" | "ICAL_SYNC_FAILED" | "ICAL_SYNC_STALE" | "PROPERTY_DRAFT" | "PROPERTY_SUSPENDED" | "PROPERTY_NOT_READY_FOR_PUBLISH";
+            /** @enum {string} */
+            severity: "ACTION" | "WARNING" | "INFO";
+            /** Format: uuid */
+            propertyId: string | null;
+            /** Format: uuid */
+            bookingId: string | null;
+            /** @example Nowa prośba o rezerwację */
+            title: string;
+            /** @example Sea View · 12–16 września */
+            description: string;
+            /** @example /host/bookings/… */
+            actionUrl: string;
+            /** @example 2026-09-01T10:15:00.000Z */
+            occurredAt: string;
+            /** @description Termin, po którym sprawa przestanie być możliwa do załatwienia */
+            deadlineAt: string | null;
+        };
+        OperationalBookingDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example RZV-7KD2M9QP */
+            reference: string;
+            /** @enum {string} */
+            status: "PENDING_HOST_APPROVAL" | "PENDING_PAYMENT" | "CONFIRMED" | "CANCELLED" | "EXPIRED" | "COMPLETED";
+            /** Format: uuid */
+            propertyId: string;
+            /** @example Baltic Loft */
+            propertyTitle: string;
+            /** @example Jan Kowalski */
+            guestName: string;
+            /** @example 2026-09-12 */
+            checkIn: string;
+            /** @example 2026-09-16 */
+            checkOut: string;
+            /** @example 2 */
+            adults: number;
+            /** @example 1 */
+            children: number;
+            /** @example 192000 */
+            totalAmountMinor: number;
+            /** @example PLN */
+            currency: string;
+            hostResponseDeadlineAt: string | null;
+        };
+        TodayDto: {
+            /**
+             * @description Dzisiaj w strefie czasowej obiektów gospodarza
+             * @example 2026-09-12
+             */
+            date: string;
+            arrivals: components["schemas"]["OperationalBookingDto"][];
+            departures: components["schemas"]["OperationalBookingDto"][];
+        };
+        PropertiesOverviewDto: {
+            /** @example 5 */
+            total: number;
+            /** @example 3 */
+            published: number;
+            /** @example 1 */
+            draft: number;
+            /** @example 1 */
+            suspended: number;
+            /** @example 0 */
+            archived: number;
+        };
+        CalendarSyncHealthDto: {
+            /**
+             * @description Kalendarze o statusie ACTIVE
+             * @example 5
+             */
+            active: number;
+            /**
+             * @description Zsynchronizowane w oczekiwanym oknie
+             * @example 4
+             */
+            healthy: number;
+            /** @example 1 */
+            failed: number;
+            /**
+             * @description Aktywne, ale dawno nieodświeżane
+             * @example 0
+             */
+            stale: number;
+            /** @example 2 */
+            disabled: number;
+        };
+        HostDashboardDto: {
+            /** @description Posortowane po pilności, potem po terminie i czasie zdarzenia */
+            attention: components["schemas"]["AttentionItemDto"][];
+            today: components["schemas"]["TodayDto"];
+            pendingRequests: components["schemas"]["OperationalBookingDto"][];
+            upcomingStays: components["schemas"]["OperationalBookingDto"][];
+            properties: components["schemas"]["PropertiesOverviewDto"];
+            calendarSync: components["schemas"]["CalendarSyncHealthDto"];
+        };
+        HostAllCalendarEventDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "HOST_BLOCK" | "EXTERNAL_CALENDAR" | "BOOKING" | "BOOKING_HOLD" | "MAINTENANCE" | "EXTERNAL_PROVIDER";
+            /** @example 2026-09-12 */
+            startDate: string;
+            /**
+             * @description Exclusive
+             * @example 2026-09-16
+             */
+            endDate: string;
+            /**
+             * @description Etykieta dla człowieka, nie enum
+             * @example Rezerwacja
+             */
+            label: string;
+            /** @description Skąd pochodzi blokada, np. nazwa kalendarza zewnętrznego */
+            sourceLabel: string | null;
+            /** @example RZV-7KD2M9QP */
+            bookingReference: string | null;
+            /** @description Imię gościa; zawsze null dla kalendarzy zewnętrznych, żeby nie ujawniać danych z cudzego feedu */
+            guestName: string | null;
+            /** @description Kiedy wygasa tymczasowa blokada */
+            expiresAt: string | null;
+        };
+        HostAllCalendarPropertyDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example Baltic Loft */
+            title: string;
+            /** @example PUBLISHED */
+            status: string;
+            /** @example Europe/Warsaw */
+            timeZone: string;
+            events: components["schemas"]["HostAllCalendarEventDto"][];
+        };
+        HostAllCalendarDto: {
+            /** @example 2026-09-01 */
+            from: string;
+            /** @example 2026-10-01 */
+            to: string;
+            properties: components["schemas"]["HostAllCalendarPropertyDto"][];
+        };
         HealthResponseDto: {
             /** @example ok */
             status: string;
+            /** @example 0.2.0 */
+            version: string;
+            /**
+             * @description development | test | staging | production
+             * @example development
+             */
+            environment: string;
+            /**
+             * @description Sekundy od startu procesu
+             * @example 1234
+             */
+            uptimeSeconds: number;
+        };
+        DependencyHealthDto: {
+            /** @enum {string} */
+            status: "up" | "down";
+            /** @description Czas odpowiedzi w ms */
+            latencyMs: number | null;
+            /** @description Klasa błędu, nigdy treść odpowiedzi ani connection string */
+            error: string | null;
+        };
+        ReadinessResponseDto: {
+            /**
+             * @description ready | not_ready
+             * @example ready
+             */
+            status: string;
+            database: components["schemas"]["DependencyHealthDto"];
+            redis: components["schemas"]["DependencyHealthDto"];
+        };
+        SyncAttemptDto: {
+            syncType: string;
+            /** @enum {string} */
+            status: "RUNNING" | "SUCCEEDED" | "FAILED";
+            startedAt: string;
+            completedAt: string | null;
+            itemsProcessed: number;
+            itemsFailed: number;
+            errorCode: string | null;
+        };
+        IntegrationDto: {
+            /** Format: uuid */
+            id: string | null;
+            /** @enum {string} */
+            provider: "HOSTAWAY" | "CHANNEX";
+            /**
+             * @description NOT_CONNECTED, gdy Host jeszcze nie podłączył tego dostawcy.
+             * @enum {string}
+             */
+            status: "PENDING" | "CONNECTED" | "DEGRADED" | "DISCONNECTED" | "ACTION_REQUIRED";
+            /** @enum {string|null} */
+            statusReason: "PARTNER_ACCESS_REQUIRED" | "CREDENTIALS_MISSING" | "CREDENTIALS_REJECTED" | "PROVIDER_UNAVAILABLE" | "DISABLED_BY_HOST" | "DISABLED_BY_ADMIN" | null;
+            /** @description Czy dostawca jest w ogóle dostępny w tym wdrożeniu. Channex wymaga dostępu partnerskiego. */
+            available: boolean;
+            /** @description Identyfikator konta u dostawcy. Klucz API nigdy nie jest zwracany. */
+            externalAccountId: string | null;
+            lastSuccessfulSyncAt: string | null;
+            lastFailedSyncAt: string | null;
+            lastErrorCode: string | null;
+            mappedProperties: number;
+            recentSyncs: components["schemas"]["SyncAttemptDto"][];
+            /** @description Adres, który Host wpisuje w panelu dostawcy. Sekret webhooka pokazywany jest raz, przy połączeniu. */
+            webhookUrl: string | null;
+        };
+        IntegrationsPageDto: {
+            items: components["schemas"]["IntegrationDto"][];
+            /** @description Czy jakikolwiek obiekt Hosta jest podpięty także przez iCal. */
+            icalAlsoConnected: boolean;
+        };
+        ConnectHostawayDto: {
+            /**
+             * @description Hostaway Account ID — z panelu Hostaway. Nie jest sekretem.
+             * @example 12345
+             */
+            accountId: string;
+            /** @description Hostaway API key (client secret). Szyfrowany przy zapisie, nigdy nie wraca przez API. */
+            apiKey: string;
+        };
+        ConnectResultDto: {
+            integration: components["schemas"]["IntegrationDto"];
+            /** @description Hasło webhooka. Pokazywane wyłącznie raz, przy połączeniu — potem nie da się go odczytać. */
+            webhookSecret: string | null;
+        };
+        ExternalListingDto: {
+            externalId: string;
+            name: string;
+            address: string | null;
+            /** @description Czy ten listing jest już zmapowany. */
+            mapped: boolean;
+            /**
+             * Format: uuid
+             * @description Propozycja dopasowania po dokładnej nazwie. Sugestia — mapowanie zatwierdza Host.
+             */
+            suggestedPropertyId: string | null;
+        };
+        PropertyMappingDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            propertyTitle: string;
+            externalPropertyId: string;
+            externalPropertyName: string | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED";
+            /** @description Ile aktywnych rezerwacji z tego źródła blokuje kalendarz obiektu. */
+            activeReservations: number;
+        };
+        ExternalListingsDto: {
+            items: components["schemas"]["ExternalListingDto"][];
+            mappings: components["schemas"]["PropertyMappingDto"][];
+        };
+        CreateMappingDto: {
+            /** Format: uuid */
+            propertyId: string;
+            /** @description Identyfikator listingu u dostawcy. */
+            externalPropertyId: string;
+            externalPropertyName?: string;
+        };
+        SyncQueuedDto: {
+            /** @example QUEUED */
+            status: string;
+            /** @description False, gdy synchronizacja już była zaplanowana. */
+            queued: boolean;
+        };
+        ChannexTestConnectionDto: {
+            /** @example true */
+            success: boolean;
+        };
+        ChannexRatePlanDto: {
+            id: string;
+            title: string;
+            /** @enum {string} */
+            sell_mode: "per_room" | "per_person";
+            max_persons: number;
+            /** @example PLN */
+            currency: string;
+            /** @description Rezervio nie przyjmuje cen z kanału. */
+            read_only: boolean;
+        };
+        ChannexRoomTypeDto: {
+            id: string;
+            title: string;
+            rate_plans: components["schemas"]["ChannexRatePlanDto"][];
+        };
+        ChannexMappingAttributesDto: {
+            room_types: components["schemas"]["ChannexRoomTypeDto"][];
+        };
+        ChannexMappingDataDto: {
+            /** @example mapping_details */
+            type: string;
+            attributes: components["schemas"]["ChannexMappingAttributesDto"];
+        };
+        ChannexMappingDetailsDto: {
+            data: components["schemas"]["ChannexMappingDataDto"];
+        };
+        ChannexChangesBodyDto: {
+            data: Record<string, never>[];
+        };
+        ChannexChangesAckDto: {
+            /** @example true */
+            success: boolean;
+            /**
+             * @description Identyfikator, po którym Channex rozpoznaje przetworzoną paczkę.
+             * @example b1a1…
+             */
+            unique_id: string;
+        };
+        GeocodeRequestDto: {
+            /** @example ul. Jelitkowska 1 */
+            addressLine1?: string;
+            /** @example 80-342 */
+            postalCode?: string;
+            /** @example Gdańsk */
+            city: string;
+            /** @example Jelitkowo */
+            district?: string;
+            /** @example PL */
+            countryCode: string;
+            /** @description Pomija cache i pyta dostawcę ponownie. Dla jawnego „znajdź z adresu” — sens tego przycisku polega na niezgodzie z poprzednią odpowiedzią. */
+            refresh?: boolean;
+        };
+        GeocodeResponseDto: {
+            /** @description False, gdy adres istnieje, ale dostawca go nie zna. */
+            found: boolean;
+            /** @example 54.4264 */
+            latitude: number | null;
+            /** @example 18.5923 */
+            longitude: number | null;
+            /**
+             * @description EXACT to numer budynku, STREET ulica, CITY samo miasto. Poniżej STREET znacznik trzeba poprawić ręcznie.
+             * @enum {string|null}
+             */
+            precision: "EXACT" | "STREET" | "CITY" | "AREA" | null;
+            /** @description Co dostawca uważa, że znalazł — do porównania przez gospodarza. */
+            formattedAddress: string | null;
+        };
+        AdminStripeStatusDto: {
+            /**
+             * @description Rezervio działa wyłącznie w sandboxie. Klucz live zatrzymuje start procesu, więc LIVE nie może się tu pojawić.
+             * @example TEST
+             * @enum {string}
+             */
+            mode: "TEST" | "UNSET";
+            /** @description Zawsze true w tym milestone. */
+            testMode: boolean;
+            /** @description Czy skonfigurowano sekret webhooka. */
+            webhookConfigured: boolean;
+            /** @description Ilu gospodarzy ma konto Connect w stanie READY. */
+            connectReadyHosts: number;
+            connectPendingHosts: number;
+        };
+        IssueCountDto: {
+            /** @enum {string} */
+            category: "PAYMENT" | "REFUND" | "SETTLEMENT" | "TRANSFER" | "PAYOUT" | "ICAL" | "NOTIFICATION" | "JOB" | "WEBHOOK" | "INTEGRATION";
+            total: number;
+            /** @description Ile z nich to twarde awarie, a nie oczekiwanie. */
+            failed: number;
+        };
+        OperationalIssueDto: {
+            /** @enum {string} */
+            type: "PAYMENT_SUCCEEDED_BOOKING_NOT_CONFIRMED" | "PAYMENT_STUCK_OPEN" | "REFUND_FAILED" | "REFUND_PENDING_TOO_LONG" | "SETTLEMENT_STUCK_PENDING" | "SETTLEMENT_AVAILABLE_HOST_NOT_READY" | "SETTLEMENT_FAILED" | "TRANSFER_FAILED" | "TRANSFER_PENDING_TOO_LONG" | "REVERSAL_FAILED" | "PAYOUT_FAILED" | "ICAL_SYNC_FAILED" | "ICAL_SYNC_STALE" | "NOTIFICATION_FAILED" | "OUTBOX_STUCK" | "JOB_FAILED" | "WEBHOOK_UNPROCESSED" | "OUTBOUND_SYNC_FAILED" | "INTEGRATION_SYNC_FAILED" | "INTEGRATION_ACTION_REQUIRED" | "EXTERNAL_RESERVATION_CONFLICT" | "PROVIDER_EVENT_UNPROCESSED";
+            /** @enum {string} */
+            category: "PAYMENT" | "REFUND" | "SETTLEMENT" | "TRANSFER" | "PAYOUT" | "ICAL" | "NOTIFICATION" | "JOB" | "WEBHOOK" | "INTEGRATION";
+            /** @enum {string} */
+            severity: "OK" | "PENDING" | "WARNING" | "FAILED";
+            /** @description Encja, której dotyczy problem */
+            targetId: string;
+            /** @description Identyfikator, którego wymaga komenda naprawcza. Zwykle ten sam co targetId — ale ponowienie przelewu przyjmuje rozliczenie, nie przelew. */
+            actionTargetId: string;
+            /** @example Przelew do gospodarza nie powiódł się */
+            title: string;
+            /**
+             * @description Kontekst bez danych wrażliwych i bez surowego payloadu dostawcy.
+             * @example RZV-7K2M9 · 1 710,00 PLN
+             */
+            description: string;
+            /** Format: uuid */
+            bookingId: string | null;
+            bookingReference: string | null;
+            /** Format: uuid */
+            hostId: string | null;
+            /** @description Kod błędu domenowy albo dostawcy — nigdy jego pełna odpowiedź. */
+            errorCode: string | null;
+            /** @example 2026-09-05T10:15:00.000Z */
+            occurredAt: string;
+            /** @description Bezpieczne akcje dostępne dla tego problemu. */
+            actions: string[];
+        };
+        AdminBookingRowDto: {
+            /** Format: uuid */
+            id: string;
+            reference: string;
+            status: string;
+            propertyTitle: string;
+            guestName: string;
+            checkIn: string;
+            checkOut: string;
+            totalAmountMinor: number;
+            currency: string;
+            paymentStatus: string | null;
+            settlementStatus: string | null;
+            createdAt: string;
+        };
+        FailedJobSummaryDto: {
+            queue: string;
+            failed: number;
+            reachable: boolean;
+        };
+        ReconciliationStatusSummaryDto: {
+            lastRunAt: string | null;
+            lastRunStatus: string | null;
+            openMismatches: number;
+            intervalMinutes: number;
+        };
+        AdminActionRecordDto: {
+            /** Format: uuid */
+            id: string;
+            actionType: string;
+            targetType: string;
+            targetId: string;
+            status: string;
+            /** @description Email operatora, który uruchomił akcję. */
+            adminEmail: string;
+            /** @description Krótkie podsumowanie wyniku. */
+            summary: string | null;
+            /** @description Liczby z przebiegu akcji. Nigdy sekrety ani payload dostawcy. */
+            details: Record<string, never>;
+            createdAt: string;
+            completedAt: string | null;
+        };
+        AdminIntegrationDto: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            provider: "HOSTAWAY" | "CHANNEX";
+            /** Format: uuid */
+            hostId: string;
+            hostDisplayName: string;
+            status: string;
+            statusReason: string | null;
+            externalAccountId: string | null;
+            lastSuccessfulSyncAt: string | null;
+            lastFailedSyncAt: string | null;
+            lastErrorCode: string | null;
+            mappedProperties: number;
+            /** @description Aktywne rezerwacje zewnętrzne blokujące kalendarz. */
+            inboundReservations: number;
+            /** @description Rezerwacje Rezervio czekające na przekazanie albo nieudane. */
+            pendingOutbound: number;
+            /** @description Nieudane synchronizacje w ostatniej dobie. */
+            failedSyncs: number;
+            /** @description Zdarzenia dostawcy przyjęte, ale nieprzetworzone. */
+            unprocessedEvents: number;
+        };
+        AdminDashboardDto: {
+            stripe: components["schemas"]["AdminStripeStatusDto"];
+            issueCounts: components["schemas"]["IssueCountDto"][];
+            /** @description Najpilniejsze problemy. */
+            topIssues: components["schemas"]["OperationalIssueDto"][];
+            recentBookings: components["schemas"]["AdminBookingRowDto"][];
+            failedJobs: components["schemas"]["FailedJobSummaryDto"][];
+            reconciliation: components["schemas"]["ReconciliationStatusSummaryDto"];
+            recentActions: components["schemas"]["AdminActionRecordDto"][];
+            /** @description Połączenia z zewnętrznymi PMS i channel managerami. */
+            integrations: components["schemas"]["AdminIntegrationDto"][];
+        };
+        AdminIntegrationsPageDto: {
+            items: components["schemas"]["AdminIntegrationDto"][];
+            total: number;
+        };
+        AdminSearchHitDto: {
+            /** @enum {string} */
+            kind: "BOOKING" | "USER" | "HOST" | "PROPERTY" | "PAYMENT" | "REFUND" | "SETTLEMENT" | "TRANSFER" | "PAYOUT";
+            /** @description Identyfikator encji, którą trafiono */
+            id: string;
+            /** @example RZV-7K2M9 · Baltic Loft */
+            label: string;
+            /** @example CONFIRMED · 12–16 września 2026 */
+            description: string;
+            /**
+             * @description Dokąd prowadzi ten wynik w panelu admina.
+             * @example /admin/bookings/…
+             */
+            href: string;
+            /** @description Rezerwacja, do której należy ten wynik — jeśli jakakolwiek. */
+            bookingId: string | null;
+        };
+        AdminSearchResponseDto: {
+            items: components["schemas"]["AdminSearchHitDto"][];
+            /** @description Zapytanie po normalizacji — nigdy nie jest logowane. */
+            query: string;
+        };
+        AdminBookingsPageDto: {
+            items: components["schemas"]["AdminBookingRowDto"][];
+            total: number;
+        };
+        AdminPaymentDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            amountMinor: number;
+            currency: string;
+            platformFeeAmountMinor: number;
+            /** @description Identyfikator u dostawcy. Jawny identyfikator, nie sekret. */
+            providerPaymentId: string | null;
+            failureCode: string | null;
+            succeededAt: string | null;
+            createdAt: string;
+        };
+        AdminRefundDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            reason: string;
+            amountMinor: number;
+            currency: string;
+            providerRefundId: string | null;
+            failureCode: string | null;
+            createdAt: string;
+        };
+        AdminTransferDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            amountMinor: number;
+            currency: string;
+            providerTransferId: string | null;
+            failureCode: string | null;
+            createdAt: string;
+        };
+        AdminSettlementDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            grossAmountMinor: number;
+            platformFeeMinor: number;
+            hostAmountMinor: number;
+            currency: string;
+            releaseAt: string;
+            transferredAt: string | null;
+            failureCode: string | null;
+            transfers: components["schemas"]["AdminTransferDto"][];
+        };
+        AdminPayoutDto: {
+            /** Format: uuid */
+            id: string;
+            status: string;
+            amountMinor: number;
+            currency: string;
+            arrivalAt: string | null;
+            failureCode: string | null;
+            createdAt: string;
+        };
+        AdminAvailabilityLinkDto: {
+            /** Format: uuid */
+            id: string;
+            /** @example BOOKING */
+            source: string;
+            startDate: string;
+            endDate: string;
+            holdStatus: string | null;
+            holdExpiresAt: string | null;
+        };
+        AdminNotificationDto: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            recipientType: string;
+            /**
+             * @description Adres zamaskowany.
+             * @example a***@example.com
+             */
+            recipientMasked: string;
+            status: string;
+            attemptCount: number;
+            lastErrorCode: string | null;
+            sentAt: string | null;
+        };
+        AdminBookingEventDto: {
+            type: string;
+            actorType: string;
+            createdAt: string;
+        };
+        AdminBookingDetailDto: {
+            /** Format: uuid */
+            id: string;
+            reference: string;
+            status: string;
+            statusReason: string | null;
+            bookingMode: string;
+            checkIn: string;
+            checkOut: string;
+            adults: number;
+            children: number;
+            /** @description Nazwisko ze snapshotu rezerwacji, nie z profilu. */
+            guestName: string;
+            /**
+             * @description Adres zamaskowany.
+             * @example a***@example.com
+             */
+            guestEmailMasked: string;
+            /** Format: uuid */
+            guestUserId: string | null;
+            /** Format: uuid */
+            hostId: string;
+            hostDisplayName: string;
+            hostEmailMasked: string | null;
+            /** Format: uuid */
+            propertyId: string;
+            propertyTitle: string;
+            totalAmountMinor: number;
+            currency: string;
+            createdAt: string;
+            payment: components["schemas"]["AdminPaymentDto"] | null;
+            refunds: components["schemas"]["AdminRefundDto"][];
+            settlement: components["schemas"]["AdminSettlementDto"] | null;
+            /** @description Wypłaty gospodarza po tym przelewie. */
+            payouts: components["schemas"]["AdminPayoutDto"][];
+            availability: components["schemas"]["AdminAvailabilityLinkDto"][];
+            messageCount: number;
+            notifications: components["schemas"]["AdminNotificationDto"][];
+            events: components["schemas"]["AdminBookingEventDto"][];
+            issues: components["schemas"]["OperationalIssueDto"][];
+            adminActions: components["schemas"]["AdminActionRecordDto"][];
+        };
+        AdminSessionSummaryDto: {
+            active: number;
+            lastSeenAt: string | null;
+            expiresAt: string | null;
+        };
+        AdminUserDetailDto: {
+            /** Format: uuid */
+            id: string;
+            email: string;
+            firstName: string | null;
+            lastName: string | null;
+            /** @description SUPPORT / ADMIN. Puste dla zwykłego konta. */
+            roles: string[];
+            /** Format: uuid */
+            hostId: string | null;
+            hostDisplayName: string | null;
+            createdAt: string;
+            /** @description Liczba żywych sesji. Nigdy sam token ani jego hash. */
+            sessions: components["schemas"]["AdminSessionSummaryDto"];
+            bookings: components["schemas"]["AdminBookingRowDto"][];
+        };
+        AdminHostPropertyDto: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            status: string;
+            city: string;
+        };
+        AdminHostDetailDto: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            /** Format: uuid */
+            userId: string | null;
+            email: string | null;
+            /**
+             * @description Gotowość konta Connect. Rezervio nie przechowuje danych KYC.
+             * @enum {string}
+             */
+            connectReadiness: "NOT_STARTED" | "IN_PROGRESS" | "READY" | "RESTRICTED" | "NONE";
+            providerAccountId: string | null;
+            chargesEnabled: boolean;
+            payoutsEnabled: boolean;
+            properties: components["schemas"]["AdminHostPropertyDto"][];
+            settlements: components["schemas"]["AdminSettlementDto"][];
+            payouts: components["schemas"]["AdminPayoutDto"][];
+            issues: components["schemas"]["OperationalIssueDto"][];
+        };
+        CalendarSyncSummaryDto: {
+            /** Format: uuid */
+            id: string;
+            provider: string;
+            name: string;
+            status: string;
+            lastSyncSucceededAt: string | null;
+            lastErrorCode: string | null;
+            consecutiveFailures: number;
+        };
+        AdminPropertyDetailDto: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            slug: string;
+            status: string;
+            city: string;
+            timeZone: string;
+            /** Format: uuid */
+            hostId: string;
+            hostDisplayName: string;
+            /** @description Ile blokad dostępności obowiązuje od dziś. */
+            activeBlocks: number;
+            /** @description Rezerwacje, które jeszcze się nie skończyły. */
+            activeBookings: number;
+            calendars: components["schemas"]["CalendarSyncSummaryDto"][];
+            /** @description Czy StayInformation jest skonfigurowane. Nigdy jego treść. */
+            stayInformationConfigured: boolean;
+            /** @description Czy dane dostępu są skonfigurowane. Kod do drzwi nie opuszcza backendu — także tutaj. */
+            sensitiveAccessConfigured: boolean;
+            bookings: components["schemas"]["AdminBookingRowDto"][];
+        };
+        OperationalIssuesPageDto: {
+            items: components["schemas"]["OperationalIssueDto"][];
+            total: number;
+            counts: components["schemas"]["IssueCountDto"][];
+        };
+        JobQueueDto: {
+            /** @example notifications */
+            name: string;
+            /** @description Typy zadań obsługiwane przez tę kolejkę — rejestr, nie odczyt z Redisa. */
+            jobTypes: string[];
+            waiting: number;
+            active: number;
+            delayed: number;
+            completed: number;
+            failed: number;
+            /** @description Czy kolejka odpowiedziała — Redis bywa niedostępny. */
+            reachable: boolean;
+        };
+        FailedJobDto: {
+            /** @example notifications */
+            queue: string;
+            /** @example 3178 */
+            id: string;
+            /** @example send */
+            name: string;
+            attemptsMade: number;
+            failedReason: string | null;
+            failedAt: string | null;
+            /** @description Identyfikatory z payloadu zadania. Payload nigdy nie wozi danych gościa. */
+            data: Record<string, never>;
+        };
+        JobsResponseDto: {
+            queues: components["schemas"]["JobQueueDto"][];
+            failed: components["schemas"]["FailedJobDto"][];
+        };
+        NotificationIssueDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            bookingId: string;
+            bookingReference: string;
+            type: string;
+            /** @enum {string} */
+            recipientType: "GUEST" | "HOST";
+            /**
+             * @description Adres zamaskowany — support widzi domenę, nie skrzynkę gościa.
+             * @example a***@example.com
+             */
+            recipientMasked: string;
+            status: string;
+            attemptCount: number;
+            lastErrorCode: string | null;
+            sentAt: string | null;
+            updatedAt: string;
+        };
+        NotificationsPageDto: {
+            items: components["schemas"]["NotificationIssueDto"][];
+            total: number;
+        };
+        CalendarSyncRowDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            propertyId: string;
+            propertyTitle: string;
+            /** Format: uuid */
+            hostId: string;
+            provider: string;
+            name: string;
+            status: string;
+            /** @enum {string} */
+            health: "OK" | "PENDING" | "WARNING" | "FAILED";
+            lastSyncSucceededAt: string | null;
+            lastSyncFailedAt: string | null;
+            lastErrorCode: string | null;
+            consecutiveFailures: number;
+        };
+        CalendarSyncPageDto: {
+            items: components["schemas"]["CalendarSyncRowDto"][];
+            total: number;
+        };
+        ReconciliationStatusDto: {
+            lastRunAt: string | null;
+            lastRunBy: string | null;
+            /** @enum {string|null} */
+            lastRunStatus: "STARTED" | "SUCCEEDED" | "FAILED" | null;
+            /** @description Rozliczenia zwolnione w ostatnim przebiegu */
+            released: number;
+            /** @description Przelewy uzgodnione ze stanem u dostawcy */
+            transfersRepaired: number;
+            /** @description Przelewy ponowione */
+            transfersRetried: number;
+            /** @description Cofnięcia przelewów ponowione */
+            reversalsRetried: number;
+            /** @description Wypłaty odczytane od dostawcy */
+            payoutsObserved: number;
+            /** @description Rozbieżności, których rekoncyliacja nie umiała wyjaśnić — wciąż widoczne. */
+            openMismatches: number;
+            /** @description Automatyczny przebieg co tyle minut */
+            intervalMinutes: number;
+        };
+        AdminActionsPageDto: {
+            items: components["schemas"]["AdminActionRecordDto"][];
+            total: number;
+        };
+        RetryNotificationDto: {
+            /**
+             * Format: uuid
+             * @description Wiersz notification_deliveries.
+             */
+            notificationId: string;
+        };
+        AdminActionResultDto: {
+            /**
+             * Format: uuid
+             * @description Wiersz audytu tej akcji.
+             */
+            actionId: string;
+            actionType: string;
+            /** @enum {string} */
+            status: "SUCCEEDED" | "FAILED";
+            /**
+             * @description Co się stało — po polsku, bez sekretów i bez surowej odpowiedzi dostawcy.
+             * @example Powiadomienie wróciło do kolejki.
+             */
+            summary: string;
+            /** @description Liczby, nie treść. Puste dla akcji, które nic nie zliczają. */
+            details: Record<string, never>;
+        };
+        RetryRefundDto: {
+            /** Format: uuid */
+            refundId: string;
+        };
+        RetryTransferDto: {
+            /**
+             * Format: uuid
+             * @description Rozliczenie, którego przelew ma zostać ponowiony.
+             */
+            settlementId: string;
+        };
+        IcalResyncDto: {
+            /** Format: uuid */
+            externalCalendarId: string;
+        };
+        RefreshConnectDto: {
+            /** Format: uuid */
+            hostId: string;
+        };
+        ReconcileDto: {
+            /**
+             * @default all
+             * @enum {string}
+             */
+            scope: "payment" | "settlement" | "transfer" | "payout" | "all";
+        };
+        IntegrationActionDto: {
+            /**
+             * Format: uuid
+             * @description Połączenie z zewnętrznym PMS lub channel managerem.
+             */
+            connectionId: string;
+        };
+        RetryOutboundDto: {
+            /** Format: uuid */
+            bookingId: string;
+        };
+        RetryJobDto: {
+            /** @enum {string} */
+            queue: "calendar-sync" | "booking-hold-expire" | "booking-lifecycle" | "notifications" | "payment-refund" | "payment-provider-cancel" | "stay-lifecycle" | "host-settlement";
+            /** @description Identyfikator zadania BullMQ. */
+            jobId: string;
         };
         PropertySummaryDto: {
             /** Format: uuid */
@@ -2779,6 +5162,15 @@ export interface operations {
             query?: {
                 status?: "PENDING_HOST_APPROVAL" | "PENDING_PAYMENT" | "CONFIRMED" | "CANCELLED" | "EXPIRED" | "COMPLETED";
                 propertyId?: string;
+                /** @description Szuka po numerze rezerwacji, imieniu gościa albo adresie email */
+                search?: string;
+                /** @description Pobyty kończące się od tej daty */
+                from?: string;
+                /** @description Pobyty zaczynające się przed tą datą */
+                to?: string;
+                sort?: "NEWEST" | "STAY_DATE_ASC" | "STAY_DATE_DESC" | "ACTION_REQUIRED";
+                limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -2791,7 +5183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HostBookingDto"][];
+                    "application/json": components["schemas"]["HostBookingsPageDto"];
                 };
             };
             /** @description Brak aktywnej sesji */
@@ -3410,6 +5802,605 @@ export interface operations {
             };
         };
     };
+    GuestPaymentsController_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentIntentDto"];
+                };
+            };
+            /** @description Brak ważnego dostępu gościa */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description BOOKING_HOLD_EXPIRED albo BOOKING_NOT_PAYABLE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WebhooksController_stripe: {
+        parameters: {
+            query?: never;
+            header: {
+                "stripe-signature": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookAckDto"];
+                };
+            };
+        };
+    };
+    HostPaymentsController_createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostPaymentStatusDto"];
+                };
+            };
+        };
+    };
+    HostPaymentsController_onboardingLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingLinkDto"];
+                };
+            };
+        };
+    };
+    HostPaymentsController_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostPaymentStatusDto"];
+                };
+            };
+        };
+    };
+    HostStayController_stayInformation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayInformationDto"];
+                };
+            };
+            /** @description Obiekt nie istnieje albo nie należy do gospodarza */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostStayController_saveStayInformation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStayInformationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayInformationDto"];
+                };
+            };
+        };
+    };
+    HostStayController_sensitiveAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensitiveAccessDto"];
+                };
+            };
+        };
+    };
+    HostStayController_saveSensitiveAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSensitiveAccessDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensitiveAccessDto"];
+                };
+            };
+        };
+    };
+    HostStayController_bookingAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingAccessStatusDto"];
+                };
+            };
+        };
+    };
+    HostStayController_reveal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingAccessStatusDto"];
+                };
+            };
+            /** @description BOOKING_NOT_CONFIRMED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostSettlementsController_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostFinanceSummaryDto"];
+                };
+            };
+        };
+    };
+    HostSettlementsController_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementsPageDto"];
+                };
+            };
+        };
+    };
+    HostSettlementsController_findOne: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementDto"];
+                };
+            };
+            /** @description Rozliczenie nie należy do tego gospodarza */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostSettlementsController_releaseNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementDto"];
+                };
+            };
+            /** @description SETTLEMENT_NOT_RELEASABLE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostSettlementsController_payouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostPayoutDto"][];
+                };
+            };
+        };
+    };
+    GuestStayController_stayDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StayDetailsDto"];
+                };
+            };
+            /** @description Brak ważnego dostępu gościa */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GuestStayController_messages: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Kursor z poprzedniej strony — zwraca wiadomości starsze niż on */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagesPageDto"];
+                };
+            };
+        };
+    };
+    GuestStayController_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageDto"];
+                };
+            };
+            /** @description CONVERSATION_CLOSED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostMessagingController_messages: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Kursor z poprzedniej strony — zwraca wiadomości starsze niż on */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagesPageDto"];
+                };
+            };
+            /** @description Rezerwacja nie należy do tego gospodarza */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostMessagingController_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessageDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageDto"];
+                };
+            };
+            /** @description CONVERSATION_CLOSED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostOperationsController_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostDashboardDto"];
+                };
+            };
+            /** @description Brak aktywnej sesji */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Konto bez profilu Host */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostOperationsController_calendarFor: {
+        parameters: {
+            query: {
+                from: string;
+                /** @description Exclusive */
+                to: string;
+                /** @description Zawęża widok do jednego obiektu */
+                propertyId?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostAllCalendarDto"];
+                };
+            };
+            /** @description Brak aktywnej sesji */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Konto bez profilu Host */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     HealthController_check: {
         parameters: {
             query?: never;
@@ -3427,8 +6418,1136 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponseDto"];
                 };
             };
-            /** @description Baza danych jest nieosiągalna */
+        };
+    };
+    HealthController_ready: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponseDto"];
+                };
+            };
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponseDto"];
+                };
+            };
+        };
+    };
+    HostIntegrationsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationsPageDto"];
+                };
+            };
+        };
+    };
+    HostIntegrationsController_connectHostaway: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectHostawayDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectResultDto"];
+                };
+            };
+            /** @description CREDENTIALS_REJECTED / INTEGRATION_NOT_CONNECTED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostIntegrationsController_listings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalListingsDto"];
+                };
+            };
+            /** @description Nie znaleziono połączenia */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostIntegrationsController_createMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMappingDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyMappingDto"];
+                };
+            };
+            /** @description PROPERTY_ALREADY_MAPPED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostIntegrationsController_removeMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                mappingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostIntegrationsController_syncNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncQueuedDto"];
+                };
+            };
+        };
+    };
+    HostIntegrationsController_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    HostawayWebhookController_receive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connectionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookAckDto"];
+                };
+            };
+            /** @description Nieprawidłowe dane w nagłówku Authorization */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChannexChannelController_testConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannexTestConnectionDto"];
+                };
+            };
+            /** @description Nieprawidłowy klucz API */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PARTNER_ACCESS_REQUIRED */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ChannexChannelController_mappingDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannexMappingDetailsDto"];
+                };
+            };
+        };
+    };
+    ChannexChannelController_receiveChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannexChangesBodyDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannexChangesAckDto"];
+                };
+            };
+        };
+    };
+    HostGeocodingController_geocode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeocodeRequestDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeocodeResponseDto"];
+                };
+            };
+            /** @description GEOCODING_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_integrations: {
+        parameters: {
+            query?: {
+                /** @description Numer rezerwacji lub jego fragment. */
+                search?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminIntegrationsPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_search: {
+        parameters: {
+            query: {
+                /** @description Numer rezerwacji, email, nazwa obiektu albo identyfikator dowolnej encji finansowej. */
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSearchResponseDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_bookings: {
+        parameters: {
+            query?: {
+                /** @description Numer rezerwacji lub jego fragment. */
+                search?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBookingsPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_booking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBookingDetailDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Nie znaleziono rezerwacji */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserDetailDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_host: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminHostDetailDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_property: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPropertyDetailDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_operations: {
+        parameters: {
+            query?: {
+                category?: "PAYMENT" | "REFUND" | "SETTLEMENT" | "TRANSFER" | "PAYOUT" | "ICAL" | "NOTIFICATION" | "JOB" | "WEBHOOK" | "INTEGRATION";
+                severity?: "OK" | "PENDING" | "WARNING" | "FAILED";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationalIssuesPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_jobsOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsResponseDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_notifications: {
+        parameters: {
+            query?: {
+                /** @description Numer rezerwacji lub jego fragment. */
+                search?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_calendars: {
+        parameters: {
+            query?: {
+                /** @description Numer rezerwacji lub jego fragment. */
+                search?: string;
+                status?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarSyncPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_stripe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStripeStatusDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_reconciliation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationStatusDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_auditLog: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionsPageDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryNotificationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Nie znaleziono powiadomienia */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryRefund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryRefundDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description REFUND_FAILED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryTransferDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SETTLEMENT_NOT_READY / HOST_PAYMENT_ACCOUNT_NOT_READY / TRANSFER_FAILED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_resyncCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IcalResyncDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_refreshConnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshConnectDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_reconcile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconcileDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryIntegrationSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationActionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_reconcileIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationActionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_disableIntegration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntegrationActionDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryOutbound: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryOutboundDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OUTBOUND_SYNC_FAILED */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminActionsController_retryJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryJobDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActionResultDto"];
+                };
+            };
+            /** @description ADMIN_FORBIDDEN */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description JOB_NOT_RETRYABLE */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

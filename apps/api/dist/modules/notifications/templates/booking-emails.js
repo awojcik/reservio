@@ -97,6 +97,52 @@ function copyFor(type, context) {
                     ? { label: "Zobacz rezerwację", url: context.guestUrl }
                     : undefined,
             };
+        case "STAY_INSTRUCTIONS_READY":
+            return {
+                subject: `Szczegóły pobytu — ${context.propertyTitle}`,
+                heading: "Szczegóły Twojego pobytu są gotowe",
+                lead: `Zbliża się Twój pobyt w „${context.propertyTitle}"${context.checkInTime ? `. Zameldowanie od ${context.checkInTime}` : ""}. Instrukcje dojazdu, Wi-Fi i zasady domu znajdziesz w Rezervio.`,
+                cta: context.guestUrl
+                    ? { label: "Zobacz szczegóły pobytu", url: context.guestUrl }
+                    : undefined,
+            };
+        case "SENSITIVE_ACCESS_READY":
+            return {
+                subject: `Dane dostępu — ${context.propertyTitle}`,
+                heading: "Dane dostępu są już dostępne",
+                lead: `Dane dostępu do obiektu „${context.propertyTitle}" są już dostępne w Rezervio.`,
+                cta: context.guestUrl
+                    ? { label: "Otwórz szczegóły pobytu", url: context.guestUrl }
+                    : undefined,
+                footer: "Ze względów bezpieczeństwa nie wysyłamy kodu w wiadomości email.",
+            };
+        case "STAY_CHECKOUT_REMINDER":
+            return {
+                subject: `Wymeldowanie jutro — ${context.propertyTitle}`,
+                heading: "Zbliża się wymeldowanie",
+                lead: `Wymeldowanie z „${context.propertyTitle}"${context.checkOutTime ? ` do godziny ${context.checkOutTime}` : ""}. Instrukcję wyjazdu znajdziesz w szczegółach pobytu.`,
+                cta: context.guestUrl
+                    ? { label: "Zobacz instrukcję wyjazdu", url: context.guestUrl }
+                    : undefined,
+            };
+        case "BOOKING_MESSAGE_TO_HOST":
+            return {
+                subject: `Nowa wiadomość od gościa — ${context.propertyTitle}`,
+                heading: "Nowa wiadomość od gościa",
+                lead: `${context.messageAuthor ?? context.guestName} napisał(a) w sprawie rezerwacji ${context.reference}.`,
+                cta: context.hostUrl
+                    ? { label: "Odpowiedz w Rezervio", url: context.hostUrl }
+                    : undefined,
+            };
+        case "BOOKING_MESSAGE_TO_GUEST":
+            return {
+                subject: `Nowa wiadomość od gospodarza — ${context.propertyTitle}`,
+                heading: "Nowa wiadomość od gospodarza",
+                lead: `Gospodarz odpowiedział w sprawie rezerwacji ${context.reference}.`,
+                cta: context.guestUrl
+                    ? { label: "Przeczytaj wiadomość", url: context.guestUrl }
+                    : undefined,
+            };
     }
 }
 function escapeHtml(value) {

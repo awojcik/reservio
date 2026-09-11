@@ -21,6 +21,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const queue_module_1 = require("../../infrastructure/queue/queue.module");
 const database_module_1 = require("../../infrastructure/database/database.module");
 const schema_1 = require("../../infrastructure/database/schema");
+const payment_cancel_scheduler_1 = require("../payments/payment-cancel.scheduler");
 const bookings_service_1 = require("./bookings.service");
 const SWEEP_JOB = "sweep";
 let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
@@ -28,14 +29,16 @@ let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
     queue;
     database;
     bookings;
+    paymentCancels;
     config;
     logger = new common_1.Logger(BookingHoldWorker_1.name);
     worker = null;
-    constructor(connection, queue, database, bookings, config) {
+    constructor(connection, queue, database, bookings, paymentCancels, config) {
         this.connection = connection;
         this.queue = queue;
         this.database = database;
         this.bookings = bookings;
+        this.paymentCancels = paymentCancels;
         this.config = config;
     }
     async onModuleInit() {
@@ -54,7 +57,7 @@ let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
         this.worker = new bullmq_1.Worker(queue_module_1.BOOKING_HOLD_QUEUE, async (job) => {
             if (job.name === SWEEP_JOB)
                 return this.sweepExpired();
-            return this.bookings.expireBookingHold(job.data.holdId);
+            return this.expire(job.data.holdId);
         }, {
             connection: this.connection,
             concurrency: 4,
@@ -76,6 +79,18 @@ let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
             delay: Math.max(0, expiresAt.getTime() - Date.now()),
         });
     }
+    async expire(holdId) {
+        const hold = await this.database.db
+            .select({ bookingId: schema_1.bookingHolds.bookingId })
+            .from(schema_1.bookingHolds)
+            .where((0, drizzle_orm_1.eq)(schema_1.bookingHolds.id, holdId))
+            .limit(1);
+        const result = await this.bookings.expireBookingHold(holdId);
+        if (result.expired && hold[0]) {
+            await this.paymentCancels.cancelOpenPayments(hold[0].bookingId);
+        }
+        return result;
+    }
     async sweepExpired() {
         const due = await this.database.db
             .select({ id: schema_1.bookingHolds.id })
@@ -83,7 +98,7 @@ let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.bookingHolds.status, "ACTIVE"), (0, drizzle_orm_1.lt)(schema_1.bookingHolds.expiresAt, new Date())));
         let expired = 0;
         for (const hold of due) {
-            const result = await this.bookings.expireBookingHold(hold.id);
+            const result = await this.expire(hold.id);
             if (result.expired)
                 expired += 1;
         }
@@ -101,6 +116,7 @@ exports.BookingHoldWorker = BookingHoldWorker = BookingHoldWorker_1 = __decorate
     __param(1, (0, common_1.Inject)(queue_module_1.HOLD_QUEUE)),
     __param(2, (0, common_1.Inject)(database_module_1.DATABASE)),
     __metadata("design:paramtypes", [Function, Function, Object, bookings_service_1.BookingsService,
+        payment_cancel_scheduler_1.PaymentCancelScheduler,
         config_1.ConfigService])
 ], BookingHoldWorker);
 //# sourceMappingURL=booking-hold.worker.js.map

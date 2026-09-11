@@ -20,6 +20,7 @@ const database_module_1 = require("../../../infrastructure/database/database.mod
 const schema_1 = require("../../../infrastructure/database/schema");
 const publish_readiness_1 = require("../../../domain/publish-readiness");
 const slug_1 = require("../../../domain/slug");
+const geocoding_provider_1 = require("../../geocoding/domain/geocoding-provider");
 const object_storage_1 = require("../../storage/object-storage");
 const PUBLISH_ERRORS = {
     TITLE: { field: "title", code: "TITLE_REQUIRED" },
@@ -102,10 +103,23 @@ let HostPropertiesService = HostPropertiesService_1 = class HostPropertiesServic
                 patch.countryCode = address.countryCode;
             if (address.timeZone !== undefined)
                 patch.timeZone = address.timeZone;
-            if (address.latitude !== undefined)
-                patch.latitude = address.latitude;
-            if (address.longitude !== undefined)
-                patch.longitude = address.longitude;
+            const { latitude, longitude } = address;
+            if (latitude !== undefined || longitude !== undefined) {
+                if (latitude === undefined || longitude === undefined) {
+                    throw new common_1.BadRequestException({
+                        code: "INCOMPLETE_COORDINATES",
+                        message: "Szerokość i długość geograficzną zapisujemy razem.",
+                    });
+                }
+                if (!(0, geocoding_provider_1.isStorableCoordinate)(latitude, longitude)) {
+                    throw new common_1.BadRequestException({
+                        code: "INVALID_COORDINATES",
+                        message: "To nie jest poprawna lokalizacja obiektu.",
+                    });
+                }
+                patch.latitude = latitude;
+                patch.longitude = longitude;
+            }
         }
         const capacity = dto.capacity;
         if (capacity) {

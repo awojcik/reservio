@@ -2,13 +2,17 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
   createParamDecorator,
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
-import type { HostRow } from "../../infrastructure/database/schema";
+import { AppError, AppErrorCode } from "../../common/app-error";
+import { setContextUserId } from "../../infrastructure/security/request-context";
+
+import type { HostRow, UserRole } from "../../infrastructure/database/schema";
 import { HostsService } from "../hosts/hosts.service";
 import { SessionsService, type SessionUser } from "./sessions.service";
 
@@ -33,6 +37,7 @@ export class SessionGuard implements CanActivate {
     if (!user) throw new UnauthorizedException("Sesja wygasła. Zaloguj się ponownie.");
 
     request.auth = { user, host: null };
+    setContextUserId(user.id);
     return true;
   }
 }
@@ -61,6 +66,50 @@ export class HostGuard implements CanActivate {
     if (!host) throw new ForbiddenException("To konto nie ma profilu gospodarza.");
 
     request.auth = { user, host };
+    setContextUserId(user.id);
+    return true;
+  }
+}
+
+/**
+ * Staff-only access to `/api/admin/*`.
+ *
+ * The check is here, in a guard on the server, and not in whether the frontend
+ * renders a link: hiding a route is not access control, and an admin API that
+ * trusted the UI would be open to anyone who typed the URL
+ * (milestone 11 §4, §56).
+ *
+ * SUPPORT and ADMIN both reach every read and every safe action in this
+ * milestone. The distinction is kept in the data so a future action can
+ * require ADMIN without a migration, but no action needs it yet — there is no
+ * state an admin may set by hand that support may not.
+ */
+@Injectable()
+export class AdminGuard implements CanActivate {
+  static readonly ROLES: UserRole[] = ["SUPPORT", "ADMIN"];
+
+  constructor(private readonly sessions: SessionsService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const token = request.cookies?.[this.sessions.cookieName];
+    if (!token) throw new UnauthorizedException("Wymagane zalogowanie.");
+
+    const user = await this.sessions.resolve(token);
+    if (!user) throw new UnauthorizedException("Sesja wygasła. Zaloguj się ponownie.");
+
+    if (!user.roles.some((role) => AdminGuard.ROLES.includes(role))) {
+      // Deliberately identical for a Guest and for a Host: the response must
+      // not become a way to enumerate who is staff.
+      throw new AppError(
+        AppErrorCode.ADMIN_FORBIDDEN,
+        "To konto nie ma uprawnień administracyjnych.",
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    request.auth = { user, host: null };
+    setContextUserId(user.id);
     return true;
   }
 }

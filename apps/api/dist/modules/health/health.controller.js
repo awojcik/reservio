@@ -18,41 +18,85 @@ const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const drizzle_orm_1 = require("drizzle-orm");
 const database_module_1 = require("../../infrastructure/database/database.module");
+const queue_module_1 = require("../../infrastructure/queue/queue.module");
+const security_module_1 = require("../../infrastructure/security/security.module");
 const health_dto_1 = require("./dto/health.dto");
+const PROBE_TIMEOUT_MS = 2_000;
+async function probe(name, check, logger) {
+    const started = Date.now();
+    try {
+        await Promise.race([
+            check(),
+            new Promise((_resolve, reject) => setTimeout(() => reject(new Error("TIMEOUT")), PROBE_TIMEOUT_MS).unref()),
+        ]);
+        return { status: "up", latencyMs: Date.now() - started, error: null };
+    }
+    catch (error) {
+        logger.error({ event: "health.dependency_down", dependency: name, error });
+        const raw = error.code;
+        const code = typeof raw === "string" && /^[A-Z][A-Z0-9_]{1,39}$/.test(raw) ? raw : "UNAVAILABLE";
+        return { status: "down", latencyMs: null, error: code };
+    }
+}
 let HealthController = HealthController_1 = class HealthController {
     database;
+    redis;
+    environment;
     logger = new common_1.Logger(HealthController_1.name);
-    constructor(database) {
+    constructor(database, redis, environment) {
         this.database = database;
+        this.redis = redis;
+        this.environment = environment;
     }
-    async check() {
-        try {
-            await this.database.db.execute((0, drizzle_orm_1.sql) `SELECT 1`);
-            return { status: "ok" };
-        }
-        catch (error) {
-            this.logger.error("database connection error", error);
-            throw new common_1.ServiceUnavailableException("Baza danych jest nieosiągalna");
-        }
+    check() {
+        return {
+            status: "ok",
+            version: process.env.npm_package_version ?? "0.2.0",
+            environment: this.environment.name,
+            uptimeSeconds: Math.round(process.uptime()),
+        };
+    }
+    async ready(reply) {
+        const [database, redis] = await Promise.all([
+            probe("postgres", () => this.database.db.execute((0, drizzle_orm_1.sql) `SELECT 1`), this.logger),
+            probe("redis", () => this.redis.ping(), this.logger),
+        ]);
+        const ready = database.status === "up" && redis.status === "up";
+        if (!ready)
+            reply.status(503);
+        return { status: ready ? "ready" : "not_ready", database, redis };
     }
 };
 exports.HealthController = HealthController;
 __decorate([
-    (0, common_1.Get)(),
+    (0, common_1.Get)("health"),
     (0, swagger_1.ApiOperation)({
-        summary: "Stan usługi",
-        description: "Weryfikuje połączenie z PostgreSQL. Niedostępna baza to 503, nie 200.",
+        summary: "Liveness",
+        description: "Sam proces. Nie odpytuje bazy ani Redisa — restart instancji nie naprawia niedostępnej zależności.",
     }),
     (0, swagger_1.ApiOkResponse)({ type: health_dto_1.HealthResponseDto }),
-    (0, swagger_1.ApiServiceUnavailableResponse)({ description: "Baza danych jest nieosiągalna" }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
+    __metadata("design:returntype", health_dto_1.HealthResponseDto)
 ], HealthController.prototype, "check", null);
+__decorate([
+    (0, common_1.Get)("ready"),
+    (0, swagger_1.ApiOperation)({
+        summary: "Readiness",
+        description: "PostgreSQL i Redis. 503, gdy którakolwiek zależność nie odpowiada — instancja nie powinna wtedy dostawać ruchu.",
+    }),
+    (0, swagger_1.ApiOkResponse)({ type: health_dto_1.ReadinessResponseDto }),
+    (0, swagger_1.ApiServiceUnavailableResponse)({ type: health_dto_1.ReadinessResponseDto }),
+    __param(0, (0, common_1.Res)({ passthrough: true })),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], HealthController.prototype, "ready", null);
 exports.HealthController = HealthController = HealthController_1 = __decorate([
     (0, swagger_1.ApiTags)("health"),
-    (0, common_1.Controller)("health"),
+    (0, common_1.Controller)(),
     __param(0, (0, common_1.Inject)(database_module_1.DATABASE)),
-    __metadata("design:paramtypes", [Object])
+    __param(1, (0, common_1.Inject)(queue_module_1.REDIS_CONNECTION)),
+    __metadata("design:paramtypes", [Object, Function, security_module_1.AppEnvironmentService])
 ], HealthController);
 //# sourceMappingURL=health.controller.js.map

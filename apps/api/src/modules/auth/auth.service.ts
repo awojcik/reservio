@@ -123,8 +123,13 @@ export class AuthService {
   async login(dto: LoginDto, clientKey: string): Promise<AuthResult> {
     const email = normaliseEmail(dto.email);
 
-    if (!this.rateLimiter.consume(`${clientKey}:${email}`)) {
-      this.logger.warn({ event: "auth.login.rate_limited", email });
+    /*
+     * The refusal is deliberately indistinguishable from a wrong password. A
+     * distinct "too many attempts" reply would confirm that the address exists
+     * and is worth attacking (milestone 11 §21).
+     */
+    if (this.rateLimiter.blocked(email, clientKey)) {
+      this.logger.warn({ event: "auth.login.rate_limited" });
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
@@ -135,11 +140,14 @@ export class AuthService {
     );
 
     if (!user || !valid) {
-      this.logger.warn({ event: "auth.login.failed", email });
+      this.rateLimiter.recordFailure(email, clientKey);
+      // The address itself stays out of the line: a log file full of the email
+      // addresses somebody tried is a list worth stealing.
+      this.logger.warn({ event: "auth.login.failed" });
       throw new UnauthorizedException(INVALID_CREDENTIALS);
     }
 
-    this.rateLimiter.reset(`${clientKey}:${email}`);
+    this.rateLimiter.reset(email);
 
     const host = await this.hosts.findByUserId(user.id);
     const token = await this.sessions.create(user.id);

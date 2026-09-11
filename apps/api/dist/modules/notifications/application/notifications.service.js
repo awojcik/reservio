@@ -46,8 +46,8 @@ let NotificationsService = NotificationsService_1 = class NotificationsService {
     get appBaseUrl() {
         return (this.config.get("APP_BASE_URL") ?? "http://localhost:3000").replace(/\/$/, "");
     }
-    async deliver(bookingId, type) {
-        const dedupKey = (0, notification_1.dedupKeyFor)(type, bookingId);
+    async deliver(bookingId, type, refId = null) {
+        const dedupKey = (0, notification_1.dedupKeyFor)(type, bookingId, refId);
         const context = await this.loadContext(bookingId, type);
         if (!context) {
             this.logger.warn({ event: "notification.skipped", bookingId, type, reason: "NO_CONTEXT" });
@@ -124,10 +124,16 @@ let NotificationsService = NotificationsService_1 = class NotificationsService {
     }
     async loadContext(bookingId, type) {
         const [row] = await this.database.db
-            .select({ booking: schema_1.bookings, hostEmail: schema_1.users.email })
+            .select({
+            booking: schema_1.bookings,
+            hostEmail: schema_1.users.email,
+            checkInTime: schema_1.propertyStayInformation.checkInTime,
+            checkOutTime: schema_1.propertyStayInformation.checkOutTime,
+        })
             .from(schema_1.bookings)
             .innerJoin(schema_1.hosts, (0, drizzle_orm_1.eq)(schema_1.hosts.id, schema_1.bookings.hostId))
             .leftJoin(schema_1.users, (0, drizzle_orm_1.eq)(schema_1.users.id, schema_1.hosts.userId))
+            .leftJoin(schema_1.propertyStayInformation, (0, drizzle_orm_1.eq)(schema_1.propertyStayInformation.propertyId, schema_1.bookings.propertyId))
             .where((0, drizzle_orm_1.eq)(schema_1.bookings.id, bookingId))
             .limit(1);
         if (!row)
@@ -155,6 +161,9 @@ let NotificationsService = NotificationsService_1 = class NotificationsService {
                 guestUrl,
                 hostUrl: goesToHost ? `${this.appBaseUrl}/host/bookings/${booking.id}` : undefined,
                 hostResponseDeadlineAt: booking.hostResponseDeadlineAt?.toISOString() ?? null,
+                checkInTime: row.checkInTime,
+                checkOutTime: row.checkOutTime,
+                messageAuthor: booking.guestName,
             },
         };
     }

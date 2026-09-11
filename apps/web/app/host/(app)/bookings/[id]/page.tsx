@@ -8,6 +8,8 @@ import { ApiError } from "@rezervio/api-client";
 import { BookingTimeline } from "@/components/booking/BookingTimeline";
 import { BookingActions } from "@/components/host/BookingActions";
 import { BookingStatusBadge } from "@/components/host/BookingStatusBadge";
+import { HostConversation } from "@/components/host/HostConversation";
+import { SensitiveAccessPanel } from "@/components/host/SensitiveAccessPanel";
 import { createSessionApiClient } from "@/lib/api-server";
 import { BOOKING_STATUS_REASONS } from "@/lib/booking";
 import { formatAmountMinor, formatGuests, formatLongDateRange } from "@/lib/format";
@@ -27,6 +29,15 @@ export default async function HostBookingDetailPage({ params }: PageProps) {
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
+
+  // Only meaningful once the Stay is going to happen.
+  const confirmed = booking.status === "CONFIRMED" || booking.status === "COMPLETED";
+  const [access, property] = await Promise.all([
+    confirmed
+      ? client.getBookingAccessStatus(booking.id, { cache: "no-store" }).catch(() => null)
+      : Promise.resolve(null),
+    client.getHostProperty(booking.propertyId, { cache: "no-store" }).catch(() => null),
+  ]);
 
   const rows = [
     ["Numer", booking.reference],
@@ -109,6 +120,22 @@ export default async function HostBookingDetailPage({ params }: PageProps) {
         <div className="mt-5">
           <BookingActions bookingId={booking.id} status={booking.status} />
         </div>
+      </div>
+
+      {access ? (
+        <SensitiveAccessPanel
+          bookingId={booking.id}
+          initial={access}
+          timeZone={property?.address.timeZone ?? "Europe/Warsaw"}
+        />
+      ) : null}
+
+      <div className="max-w-[560px]">
+        <HostConversation
+          bookingId={booking.id}
+          guestName={booking.guestName}
+          canWrite={booking.status !== "CANCELLED" && booking.status !== "EXPIRED"}
+        />
       </div>
     </div>
   );

@@ -16,8 +16,12 @@ type PickerMapProps = {
 
 /**
  * The same MapLibre stack the guest-facing maps use — no second mapping
- * dependency just for this form. Clicking or dragging the marker is the only
- * way to set coordinates; geocoding is out of scope for this milestone.
+ * dependency just for this form.
+ *
+ * The point normally arrives from geocoding the address the Host typed; the
+ * map's job is to show where that landed and let them correct it. A dragged
+ * marker is stored exactly like a geocoded one — the Host is closer to the
+ * building than any geocoder (§1).
  */
 export default function PickerMap({ latitude, longitude, onChange }: PickerMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -65,7 +69,8 @@ export default function PickerMap({ latitude, longitude, onChange }: PickerMapPr
     const element = document.createElement("div");
     element.className =
       "size-5 cursor-grab rounded-full border-2 border-surface bg-accent shadow-[0_1px_5px_rgba(16,24,20,0.4)]";
-    element.setAttribute("aria-label", "Lokalizacja obiektu");
+    element.setAttribute("aria-label", "Lokalizacja obiektu — przeciągnij, aby poprawić");
+    element.title = "Przeciągnij, aby poprawić lokalizację";
 
     const marker = new maplibregl.Marker({ element, draggable: true }).setLngLat(center);
     markerRef.current = marker;

@@ -92,7 +92,17 @@ let CalendarSyncWorker = CalendarSyncWorker_1 = class CalendarSyncWorker {
         return { enqueued: due.length };
     }
     async enqueue(externalCalendarId, manual) {
-        await this.queue.add(SYNC_JOB, { externalCalendarId, manual }, { jobId: `sync-${externalCalendarId}` });
+        const jobId = `sync-${externalCalendarId}`;
+        const previous = await this.queue.getJob(jobId);
+        if (previous) {
+            const state = await previous.getState();
+            if (state !== "completed" && state !== "failed") {
+                return { queued: false, pendingState: state };
+            }
+            await previous.remove().catch(() => undefined);
+        }
+        await this.queue.add(SYNC_JOB, { externalCalendarId, manual }, { jobId });
+        return { queued: true };
     }
     async onApplicationShutdown() {
         await this.worker?.close();

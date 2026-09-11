@@ -5,6 +5,7 @@ import {
   IsArray,
   IsIn,
   IsInt,
+  IsISO31661Alpha2,
   IsNumber,
   IsOptional,
   IsString,
@@ -80,11 +81,19 @@ export class HostAddressInputDto {
   @MaxLength(120)
   district?: string;
 
+  /**
+   * A real country, not any two characters.
+   *
+   * `MaxLength(2)` alone accepted "PO" — what "Polska" becomes when a Host
+   * types the country name into a two-character box. It stored cleanly and
+   * then broke geocoding silently, because the provider filters by country
+   * and no country has that code.
+   */
   @ApiPropertyOptional({ example: "PL", description: "Kod ISO-3166-1 alpha-2" })
   @IsOptional()
   @Transform(({ value }) => (typeof value === "string" ? value.trim().toUpperCase() : value))
   @IsString()
-  @MaxLength(2)
+  @IsISO31661Alpha2({ message: "countryCode musi być kodem kraju ISO-3166-1 alpha-2, np. PL." })
   countryCode?: string;
 
   @ApiPropertyOptional({ example: "Europe/Warsaw" })

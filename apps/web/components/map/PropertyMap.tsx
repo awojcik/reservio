@@ -157,6 +157,16 @@ export default function PropertyMap({
     });
 
     for (const property of results) {
+      /*
+       * Every marker is the Property's own stored point — there is no fallback
+       * to a city centre and no offset. A Property without coordinates gets no
+       * marker rather than a made-up one: a pin in roughly the right city is
+       * worse than no pin, because it looks like an answer (§2).
+       */
+      if (!Number.isFinite(property.latitude) || !Number.isFinite(property.longitude)) {
+        continue;
+      }
+
       const label = formatAmountMinor(property.price.totalAmountMinor);
       const existing = markers.get(property.id);
 
@@ -188,9 +198,13 @@ export default function PropertyMap({
       markers.set(property.id, { marker, element });
     }
 
-    if (fitKey !== null && fitKey !== fittedKeyRef.current && results.length) {
+    const mappable = results.filter(
+      (property) => Number.isFinite(property.latitude) && Number.isFinite(property.longitude),
+    );
+
+    if (fitKey !== null && fitKey !== fittedKeyRef.current && mappable.length) {
       fittedKeyRef.current = fitKey;
-      fitToResults(map, results);
+      fitToResults(map, mappable);
       setShowAreaSearch(false);
     }
   }, [results, ready, onSelect, onHover, fitKey]);
@@ -212,6 +226,7 @@ export default function PropertyMap({
 
     const target = resultsRef.current.find((property) => property.id === selectedId);
     if (!target) return;
+    if (!Number.isFinite(target.latitude) || !Number.isFinite(target.longitude)) return;
 
     const center: [number, number] = [target.longitude, target.latitude];
     if (map.getBounds().contains(center)) return;

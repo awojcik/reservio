@@ -14,6 +14,24 @@ export const BOOKING_STATUS_REASONS: Record<string, string> = {
   HOST_REJECTED: "Gospodarz odrzucił prośbę",
   AVAILABILITY_LOST: "Termin zajął się, zanim gospodarz zdążył odpowiedzieć",
   HOLD_EXPIRED: "Czas na dokończenie rezerwacji minął",
+  HOST_RESPONSE_TIMEOUT: "Gospodarz nie odpowiedział na czas",
+  GUEST_CANCELLED: "Rezerwacja anulowana przez gościa",
+  HOST_CANCELLED: "Rezerwacja anulowana przez gospodarza",
+  PAYMENT_AFTER_HOLD_EXPIRY:
+    "Płatność dotarła po wygaśnięciu blokady terminu — pieniądze wracają w całości",
+};
+
+/** Presentation for the Payment lifecycle. Domain values stay English. */
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  CREATED: "Rozpoczęta",
+  PROCESSING: "W trakcie",
+  REQUIRES_ACTION: "Wymaga potwierdzenia",
+  SUCCEEDED: "Zapłacona",
+  FAILED: "Nieudana",
+  CANCELLED: "Anulowana",
+  REFUND_PENDING: "Zwrot w toku",
+  REFUNDED: "Zwrócona",
+  PARTIALLY_REFUNDED: "Zwrócona częściowo",
 };
 
 export const BOOKING_MODE_CTA: Record<string, string> = {

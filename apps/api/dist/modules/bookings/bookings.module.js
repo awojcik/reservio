@@ -13,6 +13,9 @@ const auth_module_1 = require("../auth/auth.module");
 const availability_core_module_1 = require("../availability/availability-core.module");
 const hosts_module_1 = require("../hosts/hosts.module");
 const notifications_module_1 = require("../notifications/notifications.module");
+const payment_cancel_scheduler_1 = require("../payments/payment-cancel.scheduler");
+const payment_read_service_1 = require("../payments/payment-read.service");
+const stay_schedule_canceller_1 = require("../stay/stay-schedule.canceller");
 const booking_hold_worker_1 = require("./booking-hold.worker");
 const booking_lifecycle_worker_1 = require("./booking-lifecycle.worker");
 const bookings_controller_1 = require("./bookings.controller");
@@ -32,6 +35,9 @@ exports.BookingsModule = BookingsModule = __decorate([
             notifications_module_1.NotificationsModule,
             hosts_module_1.HostsModule,
             account_module_1.AccountModule,
+            payment_cancel_scheduler_1.PaymentCancelModule,
+            payment_read_service_1.PaymentReadModule,
+            stay_schedule_canceller_1.StayScheduleModule,
         ],
         controllers: [bookings_controller_1.BookingsController, host_bookings_controller_1.HostBookingsController],
         providers: [

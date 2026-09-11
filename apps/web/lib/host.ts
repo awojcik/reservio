@@ -57,3 +57,36 @@ export function majorToMinor(value: string): number {
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return Math.round(parsed * 100);
 }
+
+/**
+ * The country of a Property, chosen rather than typed.
+ *
+ * A two-character text box looked harmless and was not: "Polska" typed into it
+ * silently became "PO", which is not a country. It saved without complaint and
+ * then broke geocoding, because the provider filters by country code — so the
+ * address was reported as "not found" and the Property never got a point on
+ * the map.
+ *
+ * The list is deliberately short: the countries Rezervio's Hosts actually let
+ * places in. The API accepts any ISO-3166-1 alpha-2 code, so extending this is
+ * one line and needs no backend change.
+ */
+export const COUNTRY_OPTIONS = [
+  { value: "PL", label: "Polska" },
+  { value: "DE", label: "Niemcy" },
+  { value: "CZ", label: "Czechy" },
+  { value: "SK", label: "Słowacja" },
+  { value: "LT", label: "Litwa" },
+  { value: "AT", label: "Austria" },
+  { value: "IT", label: "Włochy" },
+  { value: "ES", label: "Hiszpania" },
+  { value: "PT", label: "Portugalia" },
+  { value: "FR", label: "Francja" },
+  { value: "HR", label: "Chorwacja" },
+  { value: "GR", label: "Grecja" },
+] as const;
+
+/** Whether a stored code is one this editor can offer back. */
+export function isKnownCountry(code: string): boolean {
+  return COUNTRY_OPTIONS.some((option) => option.value === code.trim().toUpperCase());
+}

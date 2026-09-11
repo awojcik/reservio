@@ -136,6 +136,24 @@ export class PropertyDetailDto extends PropertySummaryDto {
       "Czy rezerwacja wymaga akceptacji gospodarza. Gość musi to wiedzieć przed wysłaniem formularza.",
   })
   bookingMode!: string;
+
+  /*
+   * The only part of the stay information that is public. Instructions, Wi-Fi
+   * and anything resembling access details stay behind a Booking
+   * (milestone 09 §42).
+   */
+  @ApiProperty({ example: "15:00", description: "Zameldowanie od, czas lokalny obiektu" })
+  checkInTime!: string;
+
+  @ApiProperty({ example: "11:00", description: "Wymeldowanie do, czas lokalny obiektu" })
+  checkOutTime!: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Zasady domu — jedyny publiczny fragment informacji o pobycie",
+  })
+  houseRules!: string | null;
 }
 
 export class SearchResponseDto {

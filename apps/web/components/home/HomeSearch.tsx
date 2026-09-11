@@ -7,24 +7,49 @@ import { useId, useState } from "react";
 import { DatesPopover } from "@/components/search/DatesPopover";
 import { GuestsPopover } from "@/components/search/GuestsPopover";
 import { DESTINATION_SUGGESTIONS } from "@/components/search/SearchBar";
-import {
-  DEFAULT_CHECK_IN,
-  DEFAULT_CHECK_OUT,
-  DEFAULT_DESTINATION,
-  EMPTY_QUERY,
-  buildSearchParams,
-} from "@/lib/search";
+import { useLastSearch } from "@/lib/last-search";
+import { EMPTY_QUERY, buildSearchParams } from "@/lib/search";
 
 export function HomeSearch() {
   const router = useRouter();
   const listId = useId();
 
-  const [destination, setDestination] = useState(DEFAULT_DESTINATION);
-  const [dates, setDates] = useState({
-    checkIn: DEFAULT_CHECK_IN,
-    checkOut: DEFAULT_CHECK_OUT,
-  });
-  const [guests, setGuests] = useState({ adults: 2, children: 2 });
+  /*
+   * What this browser searched for last, or nothing.
+   *
+   * Read as an external store rather than copied into state by an effect: the
+   * homepage is server-rendered, the server has no localStorage, and letting
+   * React handle that transition avoids reconciling two sources of truth by
+   * hand. A first-time visitor sees an empty form, which is also the correct
+   * answer (§4).
+   */
+  const remembered = useLastSearch();
+
+  const [edited, setEdited] = useState<{
+    destination: string;
+    checkIn: string;
+    checkOut: string;
+    adults: number;
+    children: number;
+  } | null>(null);
+
+  const form = edited ?? {
+    destination: remembered?.destination ?? "",
+    checkIn: remembered?.checkIn ?? "",
+    checkOut: remembered?.checkOut ?? "",
+    adults: remembered?.adults ?? 2,
+    children: remembered?.children ?? 0,
+  };
+
+  const destination = form.destination;
+  const dates = { checkIn: form.checkIn, checkOut: form.checkOut };
+  const guests = { adults: form.adults, children: form.children };
+
+  const setDestination = (value: string) => setEdited({ ...form, destination: value });
+  const setDates = (next: { checkIn: string; checkOut: string }) =>
+    setEdited({ ...form, ...next });
+  const setGuests = (next: { adults: number; children: number }) =>
+    setEdited({ ...form, ...next });
 
   return (
     <form

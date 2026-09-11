@@ -51,6 +51,15 @@ export function PropertyDetailView({
   backHref,
   backLabel,
 }: PropertyDetailViewProps) {
+  /**
+   * A point Rezervio is willing to draw. `0, 0` is in the Gulf of Guinea and
+   * is what bad data looks like; a map centred there is worse than none.
+   */
+  const hasLocation =
+    Number.isFinite(property.latitude) &&
+    Number.isFinite(property.longitude) &&
+    !(Math.abs(property.latitude) < 1e-6 && Math.abs(property.longitude) < 1e-6);
+
   const keyFacts = [
     { icon: Users, label: formatGuestCapacity(property.maxGuests) },
     { icon: DoorOpen, label: formatBedrooms(property.bedrooms) },
@@ -146,13 +155,24 @@ export function PropertyDetailView({
               {property.district}, {property.city} — dokładny adres przekazujemy po
               rezerwacji.
             </p>
-            <div className="mt-4">
-              <PropertyLocation
-                latitude={property.latitude}
-                longitude={property.longitude}
-                label={`${property.title}, ${property.district}`}
-              />
-            </div>
+            {/*
+              The Property's own stored point, and nothing else — the same
+              numbers the search map pins and the Host confirmed in the editor.
+              Nothing here re-derives a location from the city name (§3).
+            */}
+            {hasLocation ? (
+              <div className="mt-4">
+                <PropertyLocation
+                  latitude={property.latitude}
+                  longitude={property.longitude}
+                  label={`${property.title}, ${property.district}`}
+                />
+              </div>
+            ) : (
+              <p className="mt-4 rounded-[14px] border border-dashed border-line bg-surface px-4 py-8 text-center text-[14px] text-muted">
+                Gospodarz nie wskazał jeszcze punktu na mapie.
+              </p>
+            )}
           </section>
         </div>
 

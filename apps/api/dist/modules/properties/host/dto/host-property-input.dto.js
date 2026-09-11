@@ -78,7 +78,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(({ value }) => (typeof value === "string" ? value.trim().toUpperCase() : value)),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(2),
+    (0, class_validator_1.IsISO31661Alpha2)({ message: "countryCode musi być kodem kraju ISO-3166-1 alpha-2, np. PL." }),
     __metadata("design:type", String)
 ], HostAddressInputDto.prototype, "countryCode", void 0);
 __decorate([

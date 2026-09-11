@@ -10,6 +10,7 @@ import {
   properties,
   propertyAmenities,
   propertyImages,
+  propertyStayInformation,
 } from "../../infrastructure/database/schema";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/object-storage";
 import type { PropertyDetailDto } from "./dto/property.dto";
@@ -102,7 +103,21 @@ export class PropertiesService {
           })
         : null;
 
+    // Only the three fields a traveller needs before booking.
+    const [stayInfo] = await db
+      .select({
+        checkInTime: propertyStayInformation.checkInTime,
+        checkOutTime: propertyStayInformation.checkOutTime,
+        houseRules: propertyStayInformation.houseRules,
+      })
+      .from(propertyStayInformation)
+      .where(eq(propertyStayInformation.propertyId, property.id))
+      .limit(1);
+
     return {
+      checkInTime: stayInfo?.checkInTime ?? "15:00",
+      checkOutTime: stayInfo?.checkOutTime ?? "11:00",
+      houseRules: stayInfo?.houseRules ?? null,
       id: property.id,
       slug: property.slug,
       title: property.title,

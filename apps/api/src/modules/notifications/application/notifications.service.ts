@@ -8,6 +8,7 @@ import {
   bookings,
   hosts,
   notificationDeliveries,
+  propertyStayInformation,
   users,
   type NotificationType,
 } from "../../../infrastructure/database/schema";
@@ -58,8 +59,12 @@ export class NotificationsService {
    * enqueue all compute the same key and only the first gets through
    * (milestone 05 §12).
    */
-  async deliver(bookingId: string, type: NotificationType): Promise<DeliveryOutcome> {
-    const dedupKey = dedupKeyFor(type, bookingId);
+  async deliver(
+    bookingId: string,
+    type: NotificationType,
+    refId: string | null = null,
+  ): Promise<DeliveryOutcome> {
+    const dedupKey = dedupKeyFor(type, bookingId, refId);
 
     const context = await this.loadContext(bookingId, type);
     if (!context) {
@@ -161,10 +166,19 @@ export class NotificationsService {
   /** Recipient address plus everything the template needs. */
   private async loadContext(bookingId: string, type: NotificationType) {
     const [row] = await this.database.db
-      .select({ booking: bookings, hostEmail: users.email })
+      .select({
+        booking: bookings,
+        hostEmail: users.email,
+        checkInTime: propertyStayInformation.checkInTime,
+        checkOutTime: propertyStayInformation.checkOutTime,
+      })
       .from(bookings)
       .innerJoin(hosts, eq(hosts.id, bookings.hostId))
       .leftJoin(users, eq(users.id, hosts.userId))
+      .leftJoin(
+        propertyStayInformation,
+        eq(propertyStayInformation.propertyId, bookings.propertyId),
+      )
       .where(eq(bookings.id, bookingId))
       .limit(1);
 
@@ -197,6 +211,9 @@ export class NotificationsService {
         guestUrl,
         hostUrl: goesToHost ? `${this.appBaseUrl}/host/bookings/${booking.id}` : undefined,
         hostResponseDeadlineAt: booking.hostResponseDeadlineAt?.toISOString() ?? null,
+        checkInTime: row.checkInTime,
+        checkOutTime: row.checkOutTime,
+        messageAuthor: booking.guestName,
       },
     };
   }

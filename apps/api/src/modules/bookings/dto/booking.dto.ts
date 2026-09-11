@@ -1,7 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+import { PaymentStateDto } from "../../payments/dto/payment.dto";
 import { Transform, Type } from "class-transformer";
 import {
   IsEmail,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -130,6 +133,13 @@ export class BookingActionsDto {
       "Czy rezerwacja jest już przypisana do konta. Anonimowa rezerwacja może zostać przypisana bezpiecznym claimem.",
   })
   claimed!: boolean;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "Czy można rozpocząć albo ponowić płatność. Wymaga aktywnej blokady terminu — po jej wygaśnięciu ponowienie nie jest możliwe.",
+  })
+  canPay!: boolean;
 }
 
 /** What a Guest gets back. Deliberately free of anything Host-private. */
@@ -193,6 +203,13 @@ export class BookingDto {
 
   @ApiProperty({ type: BookingActionsDto })
   allowedActions!: BookingActionsDto;
+
+  @ApiProperty({
+    type: PaymentStateDto,
+    nullable: true,
+    description: "Stan płatności; null, dopóki płatność nie została rozpoczęta",
+  })
+  payment!: PaymentStateDto | null;
 }
 
 /** Adds the Guest contact a Host needs in order to handle the request. */
@@ -223,6 +240,15 @@ export class GuestAccessDto {
   token!: string;
 }
 
+export const HOST_BOOKING_SORTS = [
+  "NEWEST",
+  "STAY_DATE_ASC",
+  "STAY_DATE_DESC",
+  "ACTION_REQUIRED",
+] as const;
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 export class HostBookingsQueryDto {
   @ApiPropertyOptional({ enum: BOOKING_STATUSES })
   @IsOptional()
@@ -233,4 +259,55 @@ export class HostBookingsQueryDto {
   @IsOptional()
   @IsUUID()
   propertyId?: string;
+
+  @ApiPropertyOptional({
+    example: "RZV-7KD2M9QP",
+    description: "Szuka po numerze rezerwacji, imieniu gościa albo adresie email",
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ example: "2026-09-01", description: "Pobyty kończące się od tej daty" })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: "from musi mieć format YYYY-MM-DD" })
+  from?: string;
+
+  @ApiPropertyOptional({ example: "2026-10-01", description: "Pobyty zaczynające się przed tą datą" })
+  @IsOptional()
+  @Matches(DATE_ONLY, { message: "to musi mieć format YYYY-MM-DD" })
+  to?: string;
+
+  @ApiPropertyOptional({ enum: HOST_BOOKING_SORTS, default: "NEWEST" })
+  @IsOptional()
+  @IsIn(HOST_BOOKING_SORTS as unknown as string[])
+  sort?: string;
+
+  @ApiPropertyOptional({ example: 20, default: 20, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ example: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}
+
+export class HostBookingsPageDto {
+  @ApiProperty({ type: [HostBookingDto] })
+  items!: HostBookingDto[];
+
+  @ApiProperty({ example: 42, description: "Liczba wszystkich pasujących rezerwacji" })
+  total!: number;
+
+  @ApiProperty({ example: true })
+  hasMore!: boolean;
 }

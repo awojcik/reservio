@@ -16,6 +16,7 @@
     "db:reset": "pnpm infra:reset && pnpm db:migrate && pnpm db:seed",
     "db:migrate": "pnpm --filter @rezervio/api db:migrate",
     "db:seed": "pnpm --filter @rezervio/api db:seed",
+    "admin:grant": "pnpm --filter @rezervio/api admin:grant",
     "db:generate": "pnpm --filter @rezervio/api db:generate",
     "api:types": "pnpm --filter @rezervio/api-client generate",
     "infra:start": "bash scripts/infra.sh start",

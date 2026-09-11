@@ -7,7 +7,26 @@ import type {
   UpdateProfileBody,
   Booking,
   CreateBookingBody,
+  HostAllCalendar,
   HostBooking,
+  HostBookingsPage,
+  HostBookingsQuery,
+  HostDashboard,
+  HostPaymentStatus,
+  OnboardingLink,
+  PaymentIntent,
+  HostFinanceSummary,
+  HostPayout,
+  Settlement,
+  SettlementsPage,
+  BookingAccessStatus,
+  Message,
+  MessagesPage,
+  SensitiveAccess,
+  StayDetails,
+  StayInformation,
+  UpdateSensitiveAccessBody,
+  UpdateStayInformationBody,
   BlockDatesBody,
   CalendarExportStatus,
   CalendarExportToken,
@@ -32,6 +51,28 @@ import type {
   SearchResponse,
   UpdateHostPropertyBody,
   UploadUrl,
+  GeocodeBody,
+  GeocodeResult,
+  AdminActionResult,
+  AdminActionsPage,
+  AdminBookingDetail,
+  AdminBookingsPage,
+  AdminDashboard,
+  AdminHostDetail,
+  AdminNotificationsPage,
+  AdminPropertyDetail,
+  AdminSearchResponse,
+  AdminStripeStatus,
+  AdminUserDetail,
+  CalendarSyncPage,
+  JobsResponse,
+  OperationalIssuesPage,
+  ReconciliationStatus,
+  AdminIntegrationsPage,
+  ConnectIntegrationResult,
+  ExternalListings,
+  HostIntegrations,
+  PropertyMapping,
 } from "./types";
 
 export class ApiError extends Error {
@@ -309,11 +350,8 @@ export function createApiClient(baseUrl: string, clientOptions: ClientOptions = 
       );
     },
 
-    listHostBookings(
-      params: { status?: string; propertyId?: string } = {},
-      options?: RequestOptions,
-    ) {
-      return request<HostBooking[]>(`/host/bookings${toQueryString(params)}`, options);
+    listHostBookings(params: HostBookingsQuery = {}, options?: RequestOptions) {
+      return request<HostBookingsPage>(`/host/bookings${toQueryString(params)}`, options);
     },
 
     getHostBooking(id: string, options?: RequestOptions) {
@@ -330,6 +368,162 @@ export function createApiClient(baseUrl: string, clientOptions: ClientOptions = 
 
     cancelHostBooking(id: string) {
       return send<HostBooking>("POST", `/host/bookings/${id}/cancel`, undefined);
+    },
+
+    // ---- stay information ----
+    /** Requires Guest access, exactly like reading the Booking does. */
+    getStayDetails(reference: string, options?: RequestOptions) {
+      return request<StayDetails>(
+        `/bookings/${encodeURIComponent(reference)}/stay`,
+        options,
+      );
+    },
+
+    getHostStayInformation(propertyId: string, options?: RequestOptions) {
+      return request<StayInformation>(
+        `/host/properties/${propertyId}/stay-information`,
+        options,
+      );
+    },
+
+    saveHostStayInformation(propertyId: string, body: UpdateStayInformationBody) {
+      return send<StayInformation>(
+        "PUT",
+        `/host/properties/${propertyId}/stay-information`,
+        body,
+      );
+    },
+
+    getHostSensitiveAccess(propertyId: string, options?: RequestOptions) {
+      return request<SensitiveAccess>(
+        `/host/properties/${propertyId}/sensitive-access`,
+        options,
+      );
+    },
+
+    saveHostSensitiveAccess(propertyId: string, body: UpdateSensitiveAccessBody) {
+      return send<SensitiveAccess>(
+        "PUT",
+        `/host/properties/${propertyId}/sensitive-access`,
+        body,
+      );
+    },
+
+    getBookingAccessStatus(bookingId: string, options?: RequestOptions) {
+      return request<BookingAccessStatus>(
+        `/host/bookings/${bookingId}/sensitive-access`,
+        options,
+      );
+    },
+
+    /**
+     * Hands the access details to this Guest now. Scoped to one Booking — the
+     * Property's default reveal timing is untouched.
+     */
+    revealBookingAccess(bookingId: string) {
+      return send<BookingAccessStatus>(
+        "POST",
+        `/host/bookings/${bookingId}/sensitive-access/reveal`,
+        undefined,
+      );
+    },
+
+    // ---- messaging ----
+    getGuestMessages(
+      reference: string,
+      params: { limit?: number; before?: string } = {},
+      options?: RequestOptions,
+    ) {
+      return request<MessagesPage>(
+        `/bookings/${encodeURIComponent(reference)}/messages${toQueryString(params)}`,
+        options,
+      );
+    },
+
+    sendGuestMessage(reference: string, body: string) {
+      return send<Message>("POST", `/bookings/${encodeURIComponent(reference)}/messages`, {
+        body,
+      });
+    },
+
+    getHostMessages(
+      bookingId: string,
+      params: { limit?: number; before?: string } = {},
+      options?: RequestOptions,
+    ) {
+      return request<MessagesPage>(
+        `/host/bookings/${bookingId}/messages${toQueryString(params)}`,
+        options,
+      );
+    },
+
+    sendHostMessage(bookingId: string, body: string) {
+      return send<Message>("POST", `/host/bookings/${bookingId}/messages`, { body });
+    },
+
+    // ---- payments ----
+    /**
+     * Starts (or resumes) paying for a Booking. Requires Guest access, exactly
+     * like reading the Booking does.
+     */
+    startPayment(reference: string, options?: RequestOptions) {
+      return send<PaymentIntent>(
+        "POST",
+        `/bookings/${encodeURIComponent(reference)}/payment`,
+        undefined,
+        options,
+      );
+    },
+
+    createHostPaymentAccount() {
+      return send<HostPaymentStatus>("POST", "/host/payments/connect-account", undefined);
+    },
+
+    createHostOnboardingLink() {
+      return send<OnboardingLink>("POST", "/host/payments/onboarding-link", undefined);
+    },
+
+    getHostPaymentStatus(options?: RequestOptions) {
+      return request<HostPaymentStatus>("/host/payments/status", options);
+    },
+
+    // ---- host settlements ----
+    getHostFinanceSummary(options?: RequestOptions) {
+      return request<HostFinanceSummary>("/host/payments/summary", options);
+    },
+
+    listHostSettlements(
+      params: { limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<SettlementsPage>(`/host/settlements${toQueryString(params)}`, options);
+    },
+
+    /** Sandbox only: skips waiting for the clock, keeps every other rule. */
+    releaseSettlementNow(settlementId: string) {
+      return send<Settlement>(
+        "POST",
+        `/host/settlements/${settlementId}/release-now`,
+        undefined,
+      );
+    },
+
+    listHostPayouts(options?: RequestOptions) {
+      return request<HostPayout[]>("/host/payouts", options);
+    },
+
+    // ---- host operations ----
+    /** Everything the action-first dashboard shows, in one request. */
+    getHostDashboard(options?: RequestOptions) {
+      return request<HostDashboard>("/host/dashboard", options);
+    },
+
+    /** One calendar across every Property of the Host. */
+    getHostAllCalendar(
+      params: { from: string; to: string; propertyId?: string; limit?: number },
+      options?: RequestOptions,
+    ) {
+      return request<HostAllCalendar>(`/host/calendar${toQueryString(params)}`, options);
     },
 
     // ---- calendar ----
@@ -408,6 +602,206 @@ export function createApiClient(baseUrl: string, clientOptions: ClientOptions = 
 
     revokeCalendarExport(id: string) {
       return send<void>("DELETE", `/host/properties/${id}/calendar-export`, undefined);
+    },
+
+    /**
+     * Address → point, for the Property editor. Server-side because the
+     * geocoder's usage policy asks for rate limiting and an identifying
+     * User-Agent, neither of which a browser can be held to.
+     */
+    geocodeAddress(body: GeocodeBody) {
+      return send<GeocodeResult>("POST", "/host/geocode", body);
+    },
+
+    // ---- admin ----
+    /**
+     * Every route below is guarded server-side by role. The client is a
+     * convenience, never the protection — a 403 is the expected answer for
+     * anybody without SUPPORT or ADMIN (milestone 11 §4).
+     */
+    getAdminDashboard(options?: RequestOptions) {
+      return request<AdminDashboard>("/admin/dashboard", options);
+    },
+
+    adminSearch(params: { q: string; limit?: number }, options?: RequestOptions) {
+      return request<AdminSearchResponse>(`/admin/search${toQueryString(params)}`, options);
+    },
+
+    listAdminBookings(
+      params: { search?: string; status?: string; limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<AdminBookingsPage>(`/admin/bookings${toQueryString(params)}`, options);
+    },
+
+    getAdminBooking(id: string, options?: RequestOptions) {
+      return request<AdminBookingDetail>(`/admin/bookings/${id}`, options);
+    },
+
+    getAdminUser(id: string, options?: RequestOptions) {
+      return request<AdminUserDetail>(`/admin/users/${id}`, options);
+    },
+
+    getAdminHost(id: string, options?: RequestOptions) {
+      return request<AdminHostDetail>(`/admin/hosts/${id}`, options);
+    },
+
+    getAdminProperty(id: string, options?: RequestOptions) {
+      return request<AdminPropertyDetail>(`/admin/properties/${id}`, options);
+    },
+
+    listOperationalIssues(
+      params: { category?: string; severity?: string; limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<OperationalIssuesPage>(`/admin/operations${toQueryString(params)}`, options);
+    },
+
+    getAdminJobs(options?: RequestOptions) {
+      return request<JobsResponse>("/admin/jobs", options);
+    },
+
+    listAdminNotifications(
+      params: { status?: string; limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<AdminNotificationsPage>(
+        `/admin/notifications${toQueryString(params)}`,
+        options,
+      );
+    },
+
+    listAdminCalendars(
+      params: { limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<CalendarSyncPage>(`/admin/ical${toQueryString(params)}`, options);
+    },
+
+    getAdminStripeStatus(options?: RequestOptions) {
+      return request<AdminStripeStatus>("/admin/stripe", options);
+    },
+
+    getReconciliationStatus(options?: RequestOptions) {
+      return request<ReconciliationStatus>("/admin/reconciliation", options);
+    },
+
+    listAdminActions(
+      params: { limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<AdminActionsPage>(`/admin/actions${toQueryString(params)}`, options);
+    },
+
+    // ---- admin actions ----
+    retryNotification(notificationId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-notification", {
+        notificationId,
+      });
+    },
+
+    retryRefund(refundId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-refund", { refundId });
+    },
+
+    retryTransfer(settlementId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-transfer", { settlementId });
+    },
+
+    resyncCalendar(externalCalendarId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/ical-resync", {
+        externalCalendarId,
+      });
+    },
+
+    refreshConnectStatus(hostId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/refresh-connect", { hostId });
+    },
+
+    runReconciliation(scope: "payment" | "settlement" | "transfer" | "payout" | "all") {
+      return send<AdminActionResult>("POST", "/admin/actions/reconcile", { scope });
+    },
+
+    retryJob(queue: string, jobId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-job", { queue, jobId });
+    },
+
+    listAdminIntegrations(
+      params: { limit?: number; offset?: number } = {},
+      options?: RequestOptions,
+    ) {
+      return request<AdminIntegrationsPage>(
+        `/admin/integrations${toQueryString(params)}`,
+        options,
+      );
+    },
+
+    retryIntegrationSync(connectionId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-integration-sync", {
+        connectionId,
+      });
+    },
+
+    reconcileIntegration(connectionId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/reconcile-integration", {
+        connectionId,
+      });
+    },
+
+    disableIntegration(connectionId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/disable-integration", {
+        connectionId,
+      });
+    },
+
+    retryOutboundReservation(bookingId: string) {
+      return send<AdminActionResult>("POST", "/admin/actions/retry-outbound-reservation", {
+        bookingId,
+      });
+    },
+
+    // ---- host integrations ----
+    /**
+     * The Host's connections to external systems. Credentials are write-only:
+     * they go in through `connectHostaway` and never come back out.
+     */
+    getHostIntegrations(options?: RequestOptions) {
+      return request<HostIntegrations>("/host/integrations", options);
+    },
+
+    connectHostaway(body: { accountId: string; apiKey: string }) {
+      return send<ConnectIntegrationResult>(
+        "POST",
+        "/host/integrations/hostaway/connect",
+        body,
+      );
+    },
+
+    listIntegrationProperties(id: string, options?: RequestOptions) {
+      return request<ExternalListings>(`/host/integrations/${id}/properties`, options);
+    },
+
+    createIntegrationMapping(
+      id: string,
+      body: { propertyId: string; externalPropertyId: string; externalPropertyName?: string },
+    ) {
+      return send<PropertyMapping>("POST", `/host/integrations/${id}/mappings`, body);
+    },
+
+    deleteIntegrationMapping(id: string, mappingId: string) {
+      return send<void>("DELETE", `/host/integrations/${id}/mappings/${mappingId}`, undefined);
+    },
+
+    syncIntegration(id: string) {
+      return send<{ status: string; queued: boolean }>(
+        "POST",
+        `/host/integrations/${id}/sync`,
+        undefined,
+      );
+    },
+
+    disconnectIntegration(id: string) {
+      return send<void>("DELETE", `/host/integrations/${id}`, undefined);
     },
   };
 }

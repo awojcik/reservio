@@ -13,6 +13,7 @@ import {
 import { GuestAccessService } from "../src/modules/bookings/guest-access.service";
 import {
   DATABASE,
+  clearFinancials,
   cleanupHosts,
   createPublishedProperty,
   createTestApp,
@@ -67,6 +68,7 @@ async function book(
 async function clearBookings() {
   await database.db.delete(availabilityBlocks).where(sql`booking_hold_id IS NOT NULL`);
   await database.db.delete(bookingHolds);
+  await clearFinancials(database);
   await database.db.delete(bookings);
   await database.db.execute(sql`DELETE FROM idempotency_keys`);
   await database.db.execute(sql`DELETE FROM outbox_events`);

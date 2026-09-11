@@ -13,13 +13,20 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 var GuestAccessService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GuestAccessService = void 0;
+exports.GuestAccessService = exports.GUEST_COOKIE_MAX_AGE = exports.GUEST_COOKIE = void 0;
+exports.guestTokenFrom = guestTokenFrom;
 const node_crypto_1 = require("node:crypto");
 const common_1 = require("@nestjs/common");
 const drizzle_orm_1 = require("drizzle-orm");
 const database_module_1 = require("../../infrastructure/database/database.module");
 const schema_1 = require("../../infrastructure/database/schema");
 const TOKEN_BYTES = 32;
+exports.GUEST_COOKIE = "rezervio_booking_access";
+exports.GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+function guestTokenFrom(request) {
+    const query = (request.query ?? {});
+    return query.token ?? request.cookies?.[exports.GUEST_COOKIE];
+}
 function hashToken(token) {
     return (0, node_crypto_1.createHash)("sha256").update(token).digest("hex");
 }

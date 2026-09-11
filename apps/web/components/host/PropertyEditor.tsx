@@ -3,7 +3,7 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   ApiError,
@@ -14,6 +14,7 @@ import {
 
 import { ImageManager } from "@/components/host/ImageManager";
 import { LocationPicker } from "@/components/host/LocationPicker";
+import { isAskable, useGeocodedLocation } from "@/components/host/useGeocodedLocation";
 import { PropertyActions } from "@/components/host/PropertyActions";
 import { StatusBadge } from "@/components/host/StatusBadge";
 import { Button, buttonStyles } from "@/components/ui/Button";
@@ -22,8 +23,10 @@ import { useToast } from "@/components/ui/Toast";
 import { apiClient } from "@/lib/api";
 import { AMENITY_LABELS } from "@/lib/format";
 import {
+  COUNTRY_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
   PUBLISH_REQUIREMENT_LABELS,
+  isKnownCountry,
   majorToMinor,
   minorToMajor,
 } from "@/lib/host";
@@ -105,6 +108,29 @@ export function PropertyEditor({
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
+
+  /**
+   * The one place a Property's point is written.
+   *
+   * Both the geocoder and a dragged marker land here, so a corrected position
+   * is stored exactly like a found one — there is no second, weaker path
+   * (§1).
+   */
+  const setCoordinates = useCallback((latitude: number, longitude: number) => {
+    setForm((current) => ({ ...current, latitude, longitude }));
+  }, []);
+
+  const geocode = useGeocodedLocation({
+    address: {
+      addressLine1: form.addressLine1,
+      postalCode: form.postalCode,
+      city: form.city,
+      countryCode: form.countryCode,
+    },
+    hasCoordinates: form.latitude !== null && form.longitude !== null,
+    onResolved: setCoordinates,
+    enabled: true,
+  });
 
   async function save(): Promise<void> {
     setSaving(true);
@@ -296,14 +322,33 @@ export function PropertyEditor({
                   placeholder="Brzeźno"
                 />
               </Field>
-              <Field label="Kod kraju">
-                <input
-                  value={form.countryCode}
-                  onChange={(event) => set("countryCode", event.target.value.toUpperCase())}
+              <Field
+                label="Kraj"
+                hint={
+                  form.countryCode && !isKnownCountry(form.countryCode)
+                    ? `Zapisany kod „${form.countryCode}” nie jest kodem kraju — wybierz kraj z listy.`
+                    : undefined
+                }
+              >
+                {/*
+                  Chosen, never typed. The old two-character box turned
+                  "Polska" into "PO" without a word, and a Property with a
+                  country that does not exist cannot be geocoded at all.
+                */}
+                <select
+                  value={isKnownCountry(form.countryCode) ? form.countryCode : ""}
+                  onChange={(event) => set("countryCode", event.target.value)}
                   className={FIELD}
-                  maxLength={2}
-                  placeholder="PL"
-                />
+                >
+                  <option value="" disabled>
+                    Wybierz kraj
+                  </option>
+                  {COUNTRY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Strefa czasowa">
                 <input
@@ -315,35 +360,52 @@ export function PropertyEditor({
               </Field>
             </div>
 
-            <Field label="Punkt na mapie" hint="Kliknij mapę lub przeciągnij znacznik.">
+            <Field
+              label="Punkt na mapie"
+              hint="Szukamy adresu automatycznie. Przeciągnij znacznik, jeśli trafiliśmy obok."
+            >
               <LocationPicker
                 latitude={form.latitude}
                 longitude={form.longitude}
-                onChange={(latitude, longitude) => {
-                  setForm((current) => ({ ...current, latitude, longitude }));
-                }}
+                onChange={setCoordinates}
               />
-              <p className="mt-2 text-[13px] text-muted tabular-nums">
-                {form.latitude !== null && form.longitude !== null
-                  ? `${form.latitude}, ${form.longitude}`
-                  : "Nie wskazano jeszcze lokalizacji"}
-              </p>
+
+              <GeocodeStatus
+                state={geocode}
+                latitude={form.latitude}
+                longitude={form.longitude}
+                askable={isAskable({
+                  addressLine1: form.addressLine1,
+                  postalCode: form.postalCode,
+                  city: form.city,
+                  countryCode: form.countryCode,
+                })}
+                onLookup={geocode.lookupNow}
+                onApply={setCoordinates}
+              />
             </Field>
           </Section>
 
           <Section title="Parametry" step={3}>
+            {/*
+              The floors match the publish rule, so the fields stop offering a
+              value that will later be refused: a Property with no bed and no
+              bathroom cannot be published, but a stepper that went down to
+              zero implied otherwise. Bedrooms genuinely may be zero — that is
+              what a studio is.
+            */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Field label="Goście">
+              <Field label="Goście" hint="min. 1">
                 <NumberInput value={form.maxGuests} onChange={(v) => set("maxGuests", v)} min={1} />
               </Field>
-              <Field label="Sypialnie">
+              <Field label="Sypialnie" hint="studio: 0">
                 <NumberInput value={form.bedrooms} onChange={(v) => set("bedrooms", v)} min={0} />
               </Field>
-              <Field label="Łóżka">
-                <NumberInput value={form.beds} onChange={(v) => set("beds", v)} min={0} />
+              <Field label="Łóżka" hint="min. 1">
+                <NumberInput value={form.beds} onChange={(v) => set("beds", v)} min={1} />
               </Field>
-              <Field label="Łazienki">
-                <NumberInput value={form.bathrooms} onChange={(v) => set("bathrooms", v)} min={0} />
+              <Field label="Łazienki" hint="min. 1">
+                <NumberInput value={form.bathrooms} onChange={(v) => set("bathrooms", v)} min={1} />
               </Field>
             </div>
           </Section>
@@ -553,5 +615,116 @@ function NumberInput({
       onChange={(event) => onChange(event.target.value)}
       className={FIELD}
     />
+  );
+}
+
+/**
+ * What the geocoder is doing, and what the Host should do about it.
+ *
+ * A found point at street precision needs no comment. Anything coarser is
+ * worth saying out loud: "somewhere in Gdańsk" is not a Property location, and
+ * the Host is the only one who can fix it (§5).
+ *
+ * Two silences this panel exists to break. An address that cannot be looked up
+ * yet — no city, no country — used to look exactly like one the geocoder had
+ * failed on. And a point found for a Property that already has one used to be
+ * announced as "found" while the marker sat where it was, which reads as the
+ * page ignoring the address that was just typed.
+ */
+function GeocodeStatus({
+  state,
+  latitude,
+  longitude,
+  askable,
+  onLookup,
+  onApply,
+}: {
+  state: ReturnType<typeof useGeocodedLocation>;
+  latitude: number | null;
+  longitude: number | null;
+  /** Whether there is enough address to ask about at all. */
+  askable: boolean;
+  onLookup: () => void;
+  onApply: (latitude: number, longitude: number) => void;
+}) {
+  const hasPoint = latitude !== null && longitude !== null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-[13px] text-muted tabular-nums">
+          {hasPoint
+            ? `${latitude}, ${longitude}`
+            : "Nie wskazano jeszcze lokalizacji"}
+        </p>
+
+        {askable ? (
+          <button
+            type="button"
+            onClick={onLookup}
+            className="text-[13px] font-bold text-brand underline underline-offset-4 transition-colors hover:text-brand-hover"
+          >
+            Znajdź z adresu
+          </button>
+        ) : null}
+      </div>
+
+      {!askable ? (
+        <p className="text-[13px] text-muted">
+          Uzupełnij miasto i kraj — wtedy poszukamy adresu na mapie.
+        </p>
+      ) : null}
+
+      {state.status === "loading" ? (
+        <p className="text-[13px] text-muted">Szukam adresu na mapie…</p>
+      ) : null}
+
+      {state.status === "found" ? (
+        <div className="space-y-1.5 text-[13px]">
+          <p className="text-muted">
+            {state.precision === "EXACT" || state.precision === "STREET" ? (
+              <>Znaleziono: {state.formattedAddress}</>
+            ) : (
+              <span className="font-bold text-ink">
+                Trafiliśmy tylko w okolicę — przeciągnij znacznik na właściwy budynek.
+              </span>
+            )}
+          </p>
+
+          {/*
+            The Property already had a point, so the lookup did not move it.
+            Saying so — and offering the move — is the difference between a
+            deliberate rule and a page that appears to ignore the address.
+          */}
+          {!state.applied ? (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="font-semibold">
+                Znacznik został tam, gdzie był.
+              </span>
+              <button
+                type="button"
+                onClick={() => onApply(state.latitude, state.longitude)}
+                className="font-bold text-brand underline underline-offset-4 transition-colors hover:text-brand-hover"
+              >
+                Przenieś go pod ten adres
+              </button>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {state.status === "not-found" ? (
+        <p className="text-[13px]">
+          Nie znaleźliśmy tego adresu. Sprawdź pisownię albo wskaż punkt na mapie
+          ręcznie — zapiszemy dokładnie to miejsce.
+        </p>
+      ) : null}
+
+      {state.status === "error" ? (
+        <p className="text-[13px]">
+          {state.message} Możesz wskazać punkt na mapie ręcznie.
+        </p>
+      ) : null}
+    </div>
   );
 }

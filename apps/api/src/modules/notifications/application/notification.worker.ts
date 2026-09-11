@@ -24,6 +24,12 @@ import { NotificationsService } from "./notifications.service";
 const OUTBOX_JOB = "outbox";
 const SEND_JOB = "send";
 
+/** Stable per logical notification, so a duplicate enqueue is a no-op. */
+function jobIdFor(type: NotificationType, bookingId: string, refId: string | null): string {
+  const slug = type.toLowerCase().replace(/_/g, "-");
+  return `notify-${slug}-${refId ?? bookingId}`;
+}
+
 /**
  * Moves outbox rows onto the queue and sends what lands there.
  *
@@ -63,6 +69,7 @@ export class NotificationWorker implements OnModuleInit, OnApplicationShutdown {
           return await this.notifications.deliver(
             job.data.bookingId,
             job.data.type as NotificationType,
+            job.data.refId ?? null,
           );
         } catch (error) {
           // A rejected address will be rejected every time; the delivery row is
@@ -108,7 +115,12 @@ export class NotificationWorker implements OnModuleInit, OnApplicationShutdown {
   async pumpOutbox(): Promise<{ enqueued: number }> {
     await this.outbox.recoverStale();
 
-    const claimed = await this.outbox.claimPending();
+    /*
+     * Scoped to notification rows. Connectivity keeps its own outbox types in
+     * the same table and pumps them with its own worker; an unscoped claim
+     * would let each pump swallow the other's events (milestone 12 §27).
+     */
+    const claimed = await this.outbox.claimPending(50, ["NOTIFICATION"]);
     let enqueued = 0;
 
     for (const event of claimed) {
@@ -119,7 +131,11 @@ export class NotificationWorker implements OnModuleInit, OnApplicationShutdown {
       }
 
       try {
-        await this.enqueue(event.payload.bookingId, type as NotificationType);
+        await this.enqueue(
+          event.payload.bookingId,
+          type as NotificationType,
+          event.payload.refId ?? null,
+        );
         await this.outbox.markProcessed(event.id);
         enqueued += 1;
       } catch (error) {
@@ -134,14 +150,39 @@ export class NotificationWorker implements OnModuleInit, OnApplicationShutdown {
    * One job per logical notification. The id keeps a re-pumped outbox row from
    * queueing the same email twice; the delivery table is the second guard.
    */
-  async enqueue(bookingId: string, type: NotificationType): Promise<void> {
+  async enqueue(
+    bookingId: string,
+    type: NotificationType,
+    refId: string | null = null,
+  ): Promise<void> {
     await this.queue.add(
       SEND_JOB,
-      { bookingId, type },
-      { jobId: `notify-${type.toLowerCase().replace(/_/g, "-")}-${bookingId}` },
+      { bookingId, type, refId: refId ?? undefined },
+      { jobId: jobIdFor(type, bookingId, refId) },
     );
 
     this.logger.log({ event: "notification.enqueued", bookingId, type });
+  }
+
+  /**
+   * Enqueues a notification whose job id has already been used.
+   *
+   * BullMQ treats `add` with a known job id as a no-op, which is exactly what
+   * makes `enqueue` safe to call twice — and exactly what would make a
+   * deliberate retry do nothing at all. Dropping the old job first is what
+   * turns "again" into work.
+   *
+   * This is not a way around at-most-once delivery: the send still has to
+   * claim the unique `dedup_key` row, so a notification that actually went out
+   * is not sent a second time (milestone 11 §10).
+   */
+  async requeue(
+    bookingId: string,
+    type: NotificationType,
+    refId: string | null = null,
+  ): Promise<void> {
+    await this.queue.remove(jobIdFor(type, bookingId, refId)).catch(() => undefined);
+    await this.enqueue(bookingId, type, refId);
   }
 
   async onApplicationShutdown(): Promise<void> {
