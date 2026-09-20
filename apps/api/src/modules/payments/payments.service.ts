@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { Queue } from "bullmq";
 
@@ -41,6 +41,7 @@ import {
   PaymentProviderError,
   type PaymentProvider,
   type ProviderEvent,
+  type ProviderPaymentState,
 } from "./domain/payment-provider";
 
 /** The Stay is no longer held, so there is nothing left to pay for. */
@@ -108,6 +109,18 @@ export class PaymentsService {
    * really exists (milestone 08 §12, §41).
    */
   async startPayment(bookingId: string): Promise<StartedPayment> {
+    /*
+     * First, find out what the provider already thinks.
+     *
+     * Without this the panel would happily resume a PaymentIntent that has
+     * *already succeeded* — Stripe replays the original response for a
+     * repeated idempotency key, so the browser gets a client secret it can no
+     * longer confirm, and the Guest is told the payment failed after their
+     * card was charged. Asking first is what makes this page correct when the
+     * webhook is late, or never arrives at all (milestone 08 §16, §19).
+     */
+    await this.reconcile(bookingId);
+
     const { booking, hold } = await this.loadPayable(bookingId);
 
     const existing = await this.openPaymentFor(booking.id);
@@ -233,6 +246,115 @@ export class PaymentsService {
     }
   }
 
+  // ------------------------------------------------------------- reconcile
+
+  /**
+   * Asks the provider what really happened, and applies it.
+   *
+   * The webhook remains the primary path and the only one with a signature,
+   * but it is a *push*: it can be minutes late, it can be lost, and against a
+   * developer machine with no public address it never arrives at all. A hold
+   * lives ten minutes, so "wait for the push" means a charged card and an
+   * expired Booking.
+   *
+   * This is the pull. It is not a second, weaker source of truth — it reads
+   * the same provider and feeds the same state machine `handleWebhook` does,
+   * so a Booking confirmed here is confirmed on exactly the evidence a
+   * Booking confirmed there is. What it never does is believe the browser:
+   * the browser can ask us to look, and nothing more (milestone 08 §4, §16).
+   */
+  async reconcile(bookingId: string): Promise<void> {
+    const open = await this.database.db
+      .select()
+      .from(payments)
+      .where(
+        and(eq(payments.bookingId, bookingId), inArray(payments.status, OPEN)),
+      );
+
+    for (const payment of open) {
+      if (!payment.providerPaymentId) continue;
+
+      let state: ProviderPaymentState | null;
+      try {
+        state = await this.provider.retrievePayment(payment.providerPaymentId);
+      } catch (error) {
+        /*
+         * A provider that cannot be reached must not take the page down with
+         * it: the Booking is still payable, the hold is still running, and the
+         * webhook may yet land. Logged and skipped.
+         */
+        this.logger.warn({
+          event: "payment.reconcile_failed",
+          paymentId: payment.id,
+          code: error instanceof PaymentProviderError ? error.code : null,
+        });
+        continue;
+      }
+
+      if (!state) continue;
+
+      await this.applyProviderState(payment, state);
+    }
+  }
+
+  /**
+   * The one place a provider outcome becomes a domain fact.
+   *
+   * Shared by the webhook and by `reconcile`, so the two cannot drift: a
+   * success confirms the Booking through the same transaction either way, and
+   * a decline leaves the Booking payable either way.
+   */
+  private async applyProviderState(
+    payment: PaymentRow,
+    state: ProviderPaymentState,
+  ): Promise<void> {
+    if (state.status === "SUCCEEDED") {
+      await this.applySucceeded(payment, state);
+      return;
+    }
+
+    if (state.status === "FAILED") {
+      await this.applyFailed(payment, state);
+      return;
+    }
+
+    if (state.status === "CANCELLED") {
+      await this.markTerminal(payment.id, "CANCELLED", { cancelledAt: new Date() });
+    }
+
+    // PROCESSING and REQUIRES_ACTION are not outcomes — the Guest is still
+    // paying, and the Payment stays open so the panel can carry on.
+  }
+
+  /**
+   * Reconciles, then reports where the Booking stands.
+   *
+   * What the browser gets back is read from our own database *after* the
+   * provider has been consulted — never from anything the browser sent.
+   */
+  async syncPayment(
+    bookingId: string,
+  ): Promise<{ bookingStatus: string; paymentStatus: string | null }> {
+    await this.reconcile(bookingId);
+
+    const [booking] = await this.database.db
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+
+    if (!booking) throw new NotFoundException("Nie znaleziono rezerwacji.");
+
+    const [payment] = await this.database.db
+      .select({ status: payments.status })
+      .from(payments)
+      .where(eq(payments.bookingId, bookingId))
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+
+    return { bookingStatus: booking.status, paymentStatus: payment?.status ?? null };
+  }
+
   // ---------------------------------------------------------------- webhook
 
   /**
@@ -323,13 +445,7 @@ export class PaymentsService {
       return;
     }
 
-    if (event.payment.status === "SUCCEEDED") {
-      await this.applySucceeded(payment, event.payment);
-    } else if (event.payment.status === "FAILED") {
-      await this.applyFailed(payment, event.payment);
-    } else if (event.payment.status === "CANCELLED") {
-      await this.markTerminal(payment.id, "CANCELLED", { cancelledAt: new Date() });
-    }
+    await this.applyProviderState(payment, event.payment);
   }
 
   /**
@@ -784,7 +900,22 @@ export class PaymentsService {
     if (!payment?.providerPaymentId) return;
     if (!OPEN.includes(payment.status as PaymentStatus)) return;
 
-    await this.provider.cancelPayment(payment.providerPaymentId, payment.id);
+    const state = await this.provider.cancelPayment(
+      payment.providerPaymentId,
+      payment.id,
+    );
+
+    /*
+     * The Guest may have completed the payment in the seconds between the hold
+     * lapsing and this job running. Recording that as a cancel would leave a
+     * charged card with no Booking and no Refund — so the provider's answer
+     * decides, and a success is routed through the ordinary late-payment path,
+     * which refunds it (milestone 08 §23, §27).
+     */
+    if (state && state.status !== "CANCELLED") {
+      await this.applyProviderState(payment, state);
+      return;
+    }
 
     await this.database.db
       .update(payments)

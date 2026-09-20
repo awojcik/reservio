@@ -112,7 +112,17 @@
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
-    box-shadow: 0 1px 3px rgb(16 24 20 / 0.18);
+    /*
+     * A ring of page background before the drop shadow.
+     *
+     * The basemap is no longer grey: a lime marker can now land on a green
+     * park and a coral one on a blue harbour. The ring keeps every marker
+     * separated from whatever is behind it, so the price stays readable
+     * without tying the marker colours to any one basemap.
+     */
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 1px 4px rgb(16 24 20 / 0.28);
     transition:
       background-color 150ms,
       border-color 150ms,

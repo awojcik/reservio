@@ -19,7 +19,6 @@ import { SearchBar } from "./SearchBar";
 import { cn } from "@/lib/cn";
 import { readLastSearch, writeLastSearch } from "@/lib/last-search";
 import {
-  EMPTY_QUERY,
   buildSearchParams,
   countActiveFilters,
   hasSearchCriteria,
@@ -97,21 +96,17 @@ export function SearchExperience({ identity }: { identity: HeaderIdentity }) {
     return best?.id ?? null;
   }, [results]);
 
-  // The stay travels with the guest into the detail page.
-  const stayQuery = useMemo(
-    () =>
-      // Empty dates are omitted rather than sent as blanks: the detail page
-      // reads them back through the same parser, and "checkIn=" would be a
-      // parameter that means nothing.
-      buildSearchParams({
-        ...EMPTY_QUERY,
-        checkIn: query.checkIn,
-        checkOut: query.checkOut,
-        adults: query.adults,
-        children: query.children,
-      }).toString(),
-    [query.checkIn, query.checkOut, query.adults, query.children],
-  );
+  /*
+   * The whole search travels with the Guest into the Listing, not just the
+   * stay: destination, guests, filters, sort and the map viewport too. The
+   * detail page reads it back through the same parser, prefills the booking
+   * box from it, and hands it back when the Guest returns — so nothing they
+   * already chose is asked for twice (§6).
+   *
+   * Values left at their default are still omitted: "checkIn=" is a parameter
+   * that means nothing.
+   */
+  const stayQuery = useMemo(() => buildSearchParams(query).toString(), [query]);
 
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const scrollTargetRef = useRef<string | null>(null);

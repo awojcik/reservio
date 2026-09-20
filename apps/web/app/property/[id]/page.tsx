@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { ApiError, type PropertyDetail } from "@rezervio/api-client";
 
 import { Header } from "@/components/layout/Header";
+import { BackToSearchLink } from "@/components/property/BackToSearchLink";
+import { BookingBox } from "@/components/property/BookingBox";
 import { PropertyDetailView } from "@/components/property/PropertyDetailView";
 import { createServerApiClient } from "@/lib/api-server";
-import { EMPTY_QUERY, buildSearchParams, parseSearchQuery } from "@/lib/search";
+import { buildSearchParams, parseSearchQuery } from "@/lib/search";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -64,15 +66,16 @@ export default async function PropertyPage({ params, searchParams }: PageProps) 
 
   const property = await loadProperty(id, query.checkIn, query.checkOut);
 
-  // Going back keeps the same stay selected — and, when no stay was chosen,
-  // keeps that too rather than inventing one.
+  /*
+   * Going back returns the whole search, not a reconstruction of it: the
+   * Listing URL carries destination, stay, guests, filters, sort and the map
+   * viewport, so the results page comes back as it was left. Dates changed in
+   * the booking box are written into the same URL, which is why the live link
+   * is a Client Component — this one is its no-JavaScript equivalent.
+   */
   const backToSearch = `/search?${buildSearchParams({
-    ...EMPTY_QUERY,
-    destination: property.city,
-    checkIn: query.checkIn,
-    checkOut: query.checkOut,
-    adults: query.adults,
-    children: query.children,
+    ...query,
+    destination: query.destination || property.city,
   }).toString()}`;
 
   return (
@@ -87,6 +90,16 @@ export default async function PropertyPage({ params, searchParams }: PageProps) 
           childrenCount={query.children}
           backHref={backToSearch}
           backLabel="Wróć do wyników"
+          back={<BackToSearchLink city={property.city} />}
+          booking={
+            <BookingBox
+              property={property}
+              checkIn={query.checkIn}
+              checkOut={query.checkOut}
+              adults={query.adults}
+              childrenCount={query.children}
+            />
+          }
         />
       </main>
     </>

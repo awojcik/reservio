@@ -207,6 +207,17 @@ stripe listen --api-key sk_test_... --forward-to localhost:3001/api/webhooks/str
 `stripe listen` wypisuje przy starcie sekret podpisu (`whsec_…`) — to jest
 wartość `STRIPE_WEBHOOK_SECRET`. Po jej zmianie zrestartuj API.
 
+**Bez `stripe listen` płatność nadal się uda — u Stripe.** Zdarzenie po prostu
+nie ma dokąd dotrzeć. Dlatego webhook nie jest jedyną drogą: po potwierdzeniu
+płatności przeglądarka woła `POST /api/bookings/:reference/payment/sync`, a
+backend **sam pyta Stripe** o rzeczywisty stan PaymentIntentu i przepuszcza
+odpowiedź przez tę samą maszynę stanów co podpisany webhook. To samo dzieje się
+przy każdym `POST /api/bookings/:reference/payment`.
+
+Przeglądarka niczego tu nie stwierdza — prosi wyłącznie o sprawdzenie. Jedynym
+źródłem prawdy pozostaje dostawca. Uruchomiony `stripe listen` jest i tak
+zalecany: potwierdza rezerwację natychmiast, bez czekania na powrót Guesta.
+
 ### Karty testowe
 
 Nigdy nie używaj prawdziwej karty. Dowolna przyszła data ważności i dowolny CVC.
@@ -226,6 +237,9 @@ Booking PENDING_PAYMENT
    → stripe listen przekazuje payment_intent.succeeded
    → Booking CONFIRMED, Hold CONVERTED, blokada BOOKING_HOLD → BOOKING
 ```
+
+Gdy webhook się spóźni albo zginie, ten sam skutek daje ścieżka `payment/sync`
+opisana wyżej — z tą różnicą, że dzieje się to, gdy Guest wróci na stronę.
 
 Po odmowie rezerwacja **zostaje** w `PENDING_PAYMENT` — Guest może spróbować
 ponownie, dopóki blokada terminu żyje. Po jej wygaśnięciu ponowienie nie jest

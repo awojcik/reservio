@@ -35,6 +35,17 @@ type PropertyDetailViewProps = {
   childrenCount: number;
   backHref: string;
   backLabel: string;
+  /**
+   * Replaces the default back link. The public page swaps in a client link
+   * that carries the live search state; the Host preview keeps the plain one.
+   */
+  back?: React.ReactNode;
+  /**
+   * Replaces the default booking card. The public page swaps in the
+   * interactive box; the Host preview has no live availability to offer, and
+   * a picker that could not answer would be worse than none.
+   */
+  booking?: React.ReactNode;
 };
 
 /**
@@ -50,6 +61,8 @@ export function PropertyDetailView({
   childrenCount,
   backHref,
   backLabel,
+  back,
+  booking,
 }: PropertyDetailViewProps) {
   /**
    * A point Rezervio is willing to draw. `0, 0` is in the Gulf of Guinea and
@@ -70,13 +83,15 @@ export function PropertyDetailView({
   return (
     <>
       <div className="py-4">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1.5 text-[14px] font-bold text-muted transition-colors hover:text-brand"
-        >
-          <ArrowLeft size={16} strokeWidth={2.4} />
-          {backLabel}
-        </Link>
+        {back ?? (
+          <Link
+            href={backHref}
+            className="inline-flex items-center gap-1.5 text-[14px] font-bold text-muted transition-colors hover:text-brand"
+          >
+            <ArrowLeft size={16} strokeWidth={2.4} />
+            {backLabel}
+          </Link>
+        )}
       </div>
 
       <Gallery
@@ -177,13 +192,15 @@ export function PropertyDetailView({
         </div>
 
         <aside className="lg:sticky lg:top-[88px] lg:self-start">
-          <BookingCard
-            property={property}
-            adults={adults}
-            childrenCount={childrenCount}
-            checkIn={checkIn}
-            checkOut={checkOut}
-          />
+          {booking ?? (
+            <BookingCard
+              property={property}
+              adults={adults}
+              childrenCount={childrenCount}
+              checkIn={checkIn}
+              checkOut={checkOut}
+            />
+          )}
         </aside>
       </div>
     </>

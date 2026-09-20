@@ -63,7 +63,15 @@ function contentSecurityPolicy(): string {
       ...(development ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "data:", "blob:", "https://images.unsplash.com", storageOrigin],
+    "img-src": [
+      "'self'",
+      "data:",
+      "blob:",
+      "https://images.unsplash.com",
+      storageOrigin,
+      // The basemap's sprite sheet and its shaded-relief tiles at low zoom.
+      "https://tiles.openfreemap.org",
+    ],
     "font-src": ["'self'", "data:"],
     "connect-src": [
       "'self'",

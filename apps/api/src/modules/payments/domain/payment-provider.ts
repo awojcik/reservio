@@ -25,6 +25,24 @@ export type ProviderPayment = {
 };
 
 /**
+ * What the provider currently believes about a payment we already created.
+ *
+ * Deliberately *not* a `ProviderPayment`: there is no `clientSecret` here,
+ * because the point of asking is to learn an outcome, not to hand the browser
+ * another chance to confirm. It carries the amount for the same reason the
+ * webhook does — the figure is checked against our own snapshot before a
+ * Booking is confirmed.
+ */
+export type ProviderPaymentState = {
+  providerPaymentId: string;
+  status: ProviderPaymentStatus;
+  amountMinor: number;
+  currency: string;
+  failureCode?: string | null;
+  failureMessage?: string | null;
+};
+
+/**
  * The provider's outcome, already reduced to what the domain cares about.
  * Mapping happens in the adapter so no Stripe vocabulary leaks inwards.
  */
@@ -139,7 +157,27 @@ export interface PaymentProvider {
   readonly name: "STRIPE";
 
   createPayment(input: CreatePaymentInput): Promise<ProviderPayment>;
-  cancelPayment(providerPaymentId: string, paymentId: string): Promise<void>;
+
+  /**
+   * Asks the provider what actually happened to a payment.
+   *
+   * The counterpart to `verifyEvent`: a webhook is a push the provider may
+   * deliver late, retry for hours, or — behind a laptop with no public address
+   * — never deliver at all. This is the pull, and it is the only way the
+   * outcome can be established without one. Returns `null` for an intent the
+   * provider no longer knows about (milestone 08 §16, §19).
+   */
+  retrievePayment(providerPaymentId: string): Promise<ProviderPaymentState | null>;
+
+  /**
+   * Best-effort cancel. Returns what the intent ended up as, because an intent
+   * that already succeeded cannot be cancelled and must never be recorded as
+   * though it had been (milestone 08 §27).
+   */
+  cancelPayment(
+    providerPaymentId: string,
+    paymentId: string,
+  ): Promise<ProviderPaymentState | null>;
   createRefund(input: CreateRefundInput): Promise<ProviderRefund>;
 
   /**

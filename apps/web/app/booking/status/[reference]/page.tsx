@@ -1,4 +1,4 @@
-import { CalendarDays, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock, Luggage, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -254,7 +254,25 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
           />
         ) : null}
 
+        {/*
+          Where to go from here. A confirmation screen whose only exit was
+          "search again" was a dead end for the Guest who had just signed in
+          and wanted the booking filed under their trips (§7).
+        */}
         <div className="mt-5 flex flex-wrap gap-3">
+          {/* Only once the Booking belongs to the account — otherwise the
+              trip page would answer 404 and the claim panel above is the
+              right next step. */}
+          {identity && booking.allowedActions.claimed ? (
+            <Link
+              href={`/account/trips/${booking.reference}`}
+              className={buttonStyles("primary", "md")}
+            >
+              <Luggage size={16} strokeWidth={2.3} />
+              Moje podróże
+            </Link>
+          ) : null}
+
           <Link href="/search" className={buttonStyles("outline", "md")}>
             <CalendarDays size={16} strokeWidth={2.3} />
             Szukaj dalej

@@ -32,11 +32,14 @@ export function AccountNav({ isHost }: { isHost: boolean }) {
 
   return (
     <>
-      <Link
-        href="/account/trips"
-        className={buttonStyles("ghost", "md", "hidden sm:inline-flex", "dark")}
-      >
-        Moje podróże
+      {/*
+        Shown on every width. Hiding it below `sm` left a Guest on a phone with
+        no route to their own bookings at all — the one thing the header of a
+        travel marketplace has to offer.
+      */}
+      <Link href="/account/trips" className={buttonStyles("ghost", "md", undefined, "dark")}>
+        <span className="sm:hidden">Podróże</span>
+        <span className="hidden sm:inline">Moje podróże</span>
       </Link>
 
       {isHost ? (

@@ -90,17 +90,34 @@ export default async function TripDetailPage({ params }: PageProps) {
         ) : null}
       </div>
 
-      {trip.propertySlug ? (
-        <div className="mt-5">
+      {/*
+        Paying, the Stay instructions and the conversation with the Host all
+        live on the booking screen. Without this link My Trips was a read-only
+        cul-de-sac: a trip waiting for payment showed the amount and offered
+        no way to pay it (§7).
+      */}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Link
+          href={`/booking/status/${trip.reference}`}
+          className={buttonStyles(trip.allowedActions.canPay ? "accent" : "primary", "md")}
+        >
+          {trip.allowedActions.canPay
+            ? "Zapłać i potwierdź"
+            : "Szczegóły pobytu i wiadomości"}
+        </Link>
+
+        {trip.propertySlug ? (
           <Link
             href={`/property/${trip.propertySlug}`}
             className={buttonStyles("outline", "md")}
           >
             Zobacz obiekt
           </Link>
-        </div>
-      ) : (
-        <p className="mt-5 text-[13px] text-muted">
+        ) : null}
+      </div>
+
+      {trip.propertySlug ? null : (
+        <p className="mt-3 text-[13px] text-muted">
           Ten obiekt nie jest już dostępny publicznie, ale Twoja rezerwacja pozostaje
           w historii.
         </p>

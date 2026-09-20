@@ -12,6 +12,7 @@ import {
   type UpdateHostPropertyBody,
 } from "@rezervio/api-client";
 
+import { BackToProperties } from "@/components/host/BackToProperties";
 import { ImageManager } from "@/components/host/ImageManager";
 import { LocationPicker } from "@/components/host/LocationPicker";
 import { isAskable, useGeocodedLocation } from "@/components/host/useGeocodedLocation";
@@ -203,6 +204,11 @@ export function PropertyEditor({
 
   return (
     <div className="py-8 sm:py-10">
+      {/* One contextual link back to the list, warning about unsaved work. */}
+      <div className="mb-4">
+        <BackToProperties dirty={dirty} />
+      </div>
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

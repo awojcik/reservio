@@ -93,6 +93,7 @@ export type BookingActions = components["schemas"]["BookingActionsDto"];
  * provider — the browser never decides that a Booking is paid.
  */
 export type PaymentIntent = components["schemas"]["PaymentIntentDto"];
+export type PaymentSync = components["schemas"]["PaymentSyncDto"];
 export type PaymentState = components["schemas"]["PaymentStateDto"];
 export type PaymentStatus = NonNullable<PaymentState["status"]>;
 export type HostPaymentStatus = components["schemas"]["HostPaymentStatusDto"];

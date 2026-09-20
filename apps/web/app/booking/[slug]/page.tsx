@@ -1,14 +1,14 @@
 import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ApiError } from "@rezervio/api-client";
 
 import { BookingForm } from "@/components/booking/BookingForm";
 import { Header } from "@/components/layout/Header";
 import { createServerApiClient } from "@/lib/api-server";
-import { EMPTY_QUERY, buildSearchParams, parseSearchQuery } from "@/lib/search";
+import { buildSearchParams, parseSearchQuery } from "@/lib/search";
 import { loadIdentity } from "@/lib/session";
 
 type PageProps = {
@@ -31,6 +31,16 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
     ),
   );
 
+  /*
+   * Booking needs a real Stay: the form creates a Hold over specific nights,
+   * and without dates every amount and label on it is an Invalid Date. Rather
+   * than render that, send the Guest to the one screen that can now fix it —
+   * the Listing, where the dates are chosen (§7).
+   */
+  if (!query.checkIn || !query.checkOut) {
+    redirect(`/property/${slug}?${buildSearchParams(query).toString()}`);
+  }
+
   const identity = await loadIdentity();
 
   let property;
@@ -46,13 +56,10 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
     throw error;
   }
 
-  const backToProperty = `/property/${slug}?${buildSearchParams({
-    ...EMPTY_QUERY,
-    checkIn: query.checkIn,
-    checkOut: query.checkOut,
-    adults: query.adults,
-    children: query.children,
-  }).toString()}`;
+  // The whole search travels back with the Guest, not just the stay: the
+  // Listing hands it on to the results page, so a Guest who steps back twice
+  // lands on the results they left.
+  const backToProperty = `/property/${slug}?${buildSearchParams(query).toString()}`;
 
   return (
     <>

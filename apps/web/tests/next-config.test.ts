@@ -134,6 +134,17 @@ describe("security headers", () => {
     expect(policy).toMatch(/connect-src[^;]*https:\/\/tiles\.openfreemap\.org/);
   });
 
+  /**
+   * Vector tiles and glyphs are fetched, but the basemap also carries a sprite
+   * sheet and shaded-relief raster tiles — those are images. Leaving them out
+   * costs no error anybody sees, just a map missing its icons and its terrain.
+   */
+  it("lets the basemap load its sprites and raster tiles", async () => {
+    const policy = await policyFor({ NODE_ENV: "production" });
+
+    expect(policy).toMatch(/img-src[^;]*https:\/\/tiles\.openfreemap\.org/);
+  });
+
   it("sends HSTS only in production", async () => {
     // Read back one environment at a time: `headers()` resolves the
     // environment when Next calls it, not when the module is imported.

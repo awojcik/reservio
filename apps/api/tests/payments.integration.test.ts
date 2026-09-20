@@ -697,6 +697,163 @@ describe("provider cancel after expiry", () => {
     expect(provider.cancelled.slice(before)).toContain(intent);
     expect((await paymentRow(booking.id)).status).toBe("CANCELLED");
   });
+
+  /**
+   * The Guest can finish paying in the seconds between the hold lapsing and
+   * this job running. Filing that as a cancel would leave a charged card with
+   * no Booking and no Refund — the provider's answer decides, not the fact
+   * that we asked (milestone 08 §23, §27).
+   */
+  it("never files an already-successful payment as cancelled", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const paymentId = started.json().paymentId;
+    const intent = provider.intentFor(paymentId)!;
+
+    provider.setIntentState(intent, {
+      status: "SUCCEEDED",
+      amountMinor: booking.totalAmountMinor,
+      currency: "PLN",
+    });
+    const hold = await holdRow(booking.id);
+    await database.db
+      .update(bookingHolds)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(bookingHolds.id, hold.id));
+    const { BookingsService } = await import("../src/modules/bookings/bookings.service");
+    await app.get(BookingsService).expireBookingHold(hold.id);
+
+    await app.get(PaymentsService).cancelProviderPayment(paymentId);
+
+    expect((await paymentRow(booking.id)).status).toBe("REFUND_PENDING");
+
+    const [refund] = await database.db
+      .select()
+      .from(refunds)
+      .where(eq(refunds.paymentId, paymentId));
+    expect(refund.reason).toBe("PAYMENT_AFTER_HOLD_EXPIRY");
+    expect(refund.amountMinor).toBe(booking.totalAmountMinor);
+  });
+});
+
+/**
+ * A webhook is a push, and a push can be late, lost, or — against a machine
+ * with no public address — never sent. The pull is what keeps a Guest whose
+ * card was charged from being told the payment failed while their hold runs
+ * out (milestone 08 §16, §19).
+ */
+describe("reconciling with the provider", () => {
+  it("confirms a Booking whose webhook never arrived", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const intent = provider.intentFor(started.json().paymentId)!;
+
+    // The money moved. Nothing told us.
+    provider.setIntentState(intent, {
+      status: "SUCCEEDED",
+      amountMinor: booking.totalAmountMinor,
+      currency: "PLN",
+    });
+    expect((await bookingRow(booking.id)).status).toBe("PENDING_PAYMENT");
+
+    const synced = await app.inject({
+      method: "POST",
+      url: `/api/bookings/${booking.reference}/payment/sync`,
+      cookies: { rezervio_booking_access: booking.token },
+    });
+
+    expect(synced.statusCode).toBe(200);
+    expect(synced.json()).toEqual({
+      bookingStatus: "CONFIRMED",
+      paymentStatus: "SUCCEEDED",
+    });
+    expect((await bookingRow(booking.id)).confirmedAt).not.toBeNull();
+  });
+
+  /**
+   * The bug this was written for: Stripe replays the original response for a
+   * repeated idempotency key, so resuming blindly handed the browser the
+   * client secret of an intent that had already succeeded. Confirming it again
+   * fails, and the Guest was told their payment failed after being charged.
+   */
+  it("refuses to resurrect a PaymentIntent that has already been paid", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const intent = provider.intentFor(started.json().paymentId)!;
+
+    provider.setIntentState(intent, {
+      status: "SUCCEEDED",
+      amountMinor: booking.totalAmountMinor,
+      currency: "PLN",
+    });
+
+    const retry = await startPayment(booking);
+
+    expect(retry.statusCode).toBe(409);
+    expect(errorCode(retry)).toBe("BOOKING_NOT_PAYABLE");
+    expect(retry.json().clientSecret).toBeUndefined();
+    expect((await bookingRow(booking.id)).status).toBe("CONFIRMED");
+  });
+
+  it("records a decline the provider never announced, and stays payable", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const intent = provider.intentFor(started.json().paymentId)!;
+
+    provider.setIntentState(intent, {
+      status: "FAILED",
+      failureCode: "card_declined",
+      failureMessage: "Your card was declined.",
+    });
+
+    const synced = await app.inject({
+      method: "POST",
+      url: `/api/bookings/${booking.reference}/payment/sync`,
+      cookies: { rezervio_booking_access: booking.token },
+    });
+
+    expect(synced.json()).toEqual({
+      bookingStatus: "PENDING_PAYMENT",
+      paymentStatus: "FAILED",
+    });
+
+    // A declined card is not a lost Stay: the hold is alive, so paying again
+    // must still be possible.
+    expect((await startPayment(booking)).statusCode).toBe(200);
+  });
+
+  it("leaves a payment still in flight alone", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const intent = provider.intentFor(started.json().paymentId)!;
+
+    // 3-D Secure in progress is not an outcome; treating it as one would
+    // decline every SCA payment in Europe.
+    provider.setIntentState(intent, { status: "REQUIRES_ACTION" });
+
+    const synced = await app.inject({
+      method: "POST",
+      url: `/api/bookings/${booking.reference}/payment/sync`,
+      cookies: { rezervio_booking_access: booking.token },
+    });
+
+    expect(synced.json()).toEqual({
+      bookingStatus: "PENDING_PAYMENT",
+      paymentStatus: "CREATED",
+    });
+    expect((await startPayment(booking)).statusCode).toBe(200);
+  });
+
+  it("needs Guest access, exactly like everything else about a Booking", async () => {
+    const booking = await payableBooking();
+
+    const anonymous = await app.inject({
+      method: "POST",
+      url: `/api/bookings/${booking.reference}/payment/sync`,
+    });
+
+    expect(anonymous.statusCode).toBe(401);
+  });
 });
 
 describe("Connect foundation", () => {

@@ -39,6 +39,20 @@ export class PaymentIntentDto {
   expiresAt!: string | null;
 }
 
+/**
+ * Where a Booking stands once the provider has been asked directly.
+ *
+ * Returned by the endpoint the browser calls after confirming — the browser
+ * reports that it finished, the server decides what that was worth.
+ */
+export class PaymentSyncDto {
+  @ApiProperty({ example: "CONFIRMED" })
+  bookingStatus!: string;
+
+  @ApiProperty({ enum: PAYMENT_STATUSES, nullable: true, type: String })
+  paymentStatus!: string | null;
+}
+
 /** The money side of a Booking, as the Guest sees it. */
 export class PaymentStateDto {
   @ApiProperty({ enum: PAYMENT_STATUSES, nullable: true, type: String })

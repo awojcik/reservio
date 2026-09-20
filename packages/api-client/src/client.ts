@@ -15,6 +15,7 @@ import type {
   HostPaymentStatus,
   OnboardingLink,
   PaymentIntent,
+  PaymentSync,
   HostFinanceSummary,
   HostPayout,
   Settlement,
@@ -470,6 +471,21 @@ export function createApiClient(baseUrl: string, clientOptions: ClientOptions = 
       return send<PaymentIntent>(
         "POST",
         `/bookings/${encodeURIComponent(reference)}/payment`,
+        undefined,
+        options,
+      );
+    },
+
+    /**
+     * Asks the backend to reconcile a payment with the provider.
+     *
+     * Sends nothing: it is a request to go and look, not a claim about what
+     * happened. Only the provider's own answer moves a Booking.
+     */
+    syncPayment(reference: string, options?: RequestOptions) {
+      return send<PaymentSync>(
+        "POST",
+        `/bookings/${encodeURIComponent(reference)}/payment/sync`,
         undefined,
         options,
       );

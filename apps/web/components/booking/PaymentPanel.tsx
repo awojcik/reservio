@@ -45,6 +45,7 @@ export function PaymentPanel({
   totalAmountMinor: number;
   holdExpiresAt: string | null;
 }) {
+  const router = useRouter();
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +64,18 @@ export function PaymentPanel({
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
+
+        /*
+         * The backend reconciles with the provider before answering, so being
+         * turned away here usually means the Booking has moved on — most often
+         * that it is now paid and confirmed. Re-rendering the page shows that;
+         * leaving a payment form up would invite the Guest to pay twice.
+         */
+        if (movedOn(cause)) {
+          router.refresh();
+          return;
+        }
+
         setError(describe(cause));
         setLoading(false);
       });
@@ -70,7 +83,7 @@ export function PaymentPanel({
     return () => {
       cancelled = true;
     };
-  }, [reference]);
+  }, [reference, router]);
 
   if (!PUBLISHABLE_KEY) {
     return (
@@ -164,9 +177,9 @@ function PaymentForm({ reference }: { reference: string }) {
      * challenge Stripe navigates away and comes back to `return_url`; when it
      * does not, we stay on the page.
      *
-     * Either way the result below is *not* what confirms the Booking. That
-     * only happens when the signed webhook reaches the backend
-     * (milestone 08 §4, §16).
+     * Either way the result below is *not* what confirms the Booking. Only the
+     * backend does that, on the provider's own word — pushed to it as a signed
+     * webhook, or pulled by the sync call below (milestone 08 §4, §16).
      */
     const result = await stripeJs.confirmPayment({
       elements,
@@ -183,7 +196,18 @@ function PaymentForm({ reference }: { reference: string }) {
       return;
     }
 
-    // Ask the server what it thinks; the browser's opinion does not count.
+    /*
+     * Ask the server what it thinks; the browser's opinion does not count.
+     *
+     * This call does not report success — it asks Rezervio to go and ask the
+     * provider. Waiting only for the webhook would leave the Guest staring at
+     * an unpaid Booking whose hold is running out, because a webhook can be
+     * late, lost, or (on a machine with no public address) never sent at all.
+     * A failure here is not the Guest's problem: the money is with the
+     * provider either way, and the webhook or the next visit will settle it.
+     */
+    await apiClient.syncPayment(reference).catch(() => undefined);
+
     router.refresh();
     setPending(false);
   }
@@ -223,11 +247,22 @@ function Panel({ children }: Readonly<{ children: React.ReactNode }>) {
   );
 }
 
+/** Codes that mean "this Booking is past paying", not "something broke". */
+function movedOn(error: unknown): boolean {
+  return codeOf(error) === "BOOKING_NOT_PAYABLE";
+}
+
+function codeOf(error: unknown): string | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+
+  const body = error.body as { code?: string; message?: { code?: string } } | undefined;
+  return body?.code ?? body?.message?.code;
+}
+
 function describe(error: unknown): string {
   if (!(error instanceof ApiError)) return "Nie udało się rozpocząć płatności.";
 
-  const body = error.body as { code?: string; message?: { code?: string } } | undefined;
-  const code = body?.code ?? body?.message?.code;
+  const code = codeOf(error);
 
   if (code === "BOOKING_HOLD_EXPIRED") {
     return "Termin nie jest już zablokowany. Sprawdź ponownie dostępność.";

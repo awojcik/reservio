@@ -8,6 +8,7 @@ import {
   type ProviderAccount,
   type ProviderEvent,
   type ProviderPayment,
+  type ProviderPaymentState,
   type ProviderPaymentStatus,
   type ProviderPayout,
   type ProviderRefund,
@@ -34,10 +35,13 @@ export class FakePaymentProvider implements PaymentProvider {
   readonly created: CreatePaymentInput[] = [];
   readonly refunds: CreateRefundInput[] = [];
   readonly cancelled: string[] = [];
+  readonly retrieved: string[] = [];
   readonly accountsCreated: string[] = [];
 
   /** Idempotency: the same paymentId must map to the same intent. */
   private readonly intents = new Map<string, string>();
+  /** What the provider would say if asked about an intent right now. */
+  private readonly intentState = new Map<string, ProviderPaymentState>();
   private refundOutcome: ProviderRefund["status"] = "SUCCEEDED";
   private refundFailures = 0;
   private accountFlags = {
@@ -65,6 +69,15 @@ export class FakePaymentProvider implements PaymentProvider {
     const providerPaymentId = existing ?? `pi_${randomUUID().replace(/-/g, "")}`;
     this.intents.set(input.paymentId, providerPaymentId);
 
+    if (!this.intentState.has(providerPaymentId)) {
+      this.intentState.set(providerPaymentId, {
+        providerPaymentId,
+        status: "PROCESSING",
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+      });
+    }
+
     return Promise.resolve({
       providerPaymentId,
       clientSecret: `${providerPaymentId}_secret_test`,
@@ -72,9 +85,48 @@ export class FakePaymentProvider implements PaymentProvider {
     });
   }
 
-  cancelPayment(providerPaymentId: string): Promise<void> {
+  /**
+   * Lets a test say what the provider believes, independently of what Rezervio
+   * recorded — which is exactly the situation a lost webhook creates.
+   */
+  setIntentState(
+    providerPaymentId: string,
+    state: Partial<Omit<ProviderPaymentState, "providerPaymentId">>,
+  ): void {
+    const current = this.intentState.get(providerPaymentId);
+    this.intentState.set(providerPaymentId, {
+      providerPaymentId,
+      status: "PROCESSING",
+      amountMinor: 0,
+      currency: "PLN",
+      ...current,
+      ...state,
+    });
+  }
+
+  retrievePayment(providerPaymentId: string): Promise<ProviderPaymentState | null> {
+    this.retrieved.push(providerPaymentId);
+    return Promise.resolve(this.intentState.get(providerPaymentId) ?? null);
+  }
+
+  cancelPayment(providerPaymentId: string): Promise<ProviderPaymentState | null> {
     this.cancelled.push(providerPaymentId);
-    return Promise.resolve();
+
+    const current = this.intentState.get(providerPaymentId);
+    // A succeeded intent cannot be cancelled — Stripe says so, and so do we.
+    if (current && current.status !== "PROCESSING" && current.status !== "REQUIRES_ACTION") {
+      return Promise.resolve(current);
+    }
+
+    const cancelled: ProviderPaymentState = {
+      providerPaymentId,
+      status: "CANCELLED",
+      amountMinor: current?.amountMinor ?? 0,
+      currency: current?.currency ?? "PLN",
+    };
+    this.intentState.set(providerPaymentId, cancelled);
+
+    return Promise.resolve(cancelled);
   }
 
   createRefund(input: CreateRefundInput): Promise<ProviderRefund> {
@@ -200,6 +252,7 @@ export class FakePaymentProvider implements PaymentProvider {
     this.created.length = 0;
     this.refunds.length = 0;
     this.cancelled.length = 0;
+    this.retrieved.length = 0;
     this.accountsCreated.length = 0;
     this.transfers.length = 0;
     this.reversals.length = 0;

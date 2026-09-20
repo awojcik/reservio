@@ -811,6 +811,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bookings/{reference}/payment/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uzgodnienie płatności z dostawcą
+         * @description Pyta dostawcę o rzeczywisty stan płatności i stosuje go tak samo jak podpisany webhook. Przeglądarka niczego tu nie stwierdza — prosi jedynie o sprawdzenie.
+         */
+        post: operations["GuestPaymentsController_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/webhooks/stripe": {
         parameters: {
             query?: never;
@@ -2834,6 +2854,12 @@ export interface components {
             currency: string;
             /** @description Do kiedy termin jest zablokowany */
             expiresAt: string | null;
+        };
+        PaymentSyncDto: {
+            /** @example CONFIRMED */
+            bookingStatus: string;
+            /** @enum {string|null} */
+            paymentStatus: "CREATED" | "PROCESSING" | "REQUIRES_ACTION" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "PARTIALLY_REFUNDED" | null;
         };
         WebhookAckDto: {
             /** @example true */
@@ -5830,6 +5856,34 @@ export interface operations {
             };
             /** @description BOOKING_HOLD_EXPIRED albo BOOKING_NOT_PAYABLE */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GuestPaymentsController_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentSyncDto"];
+                };
+            };
+            /** @description Brak ważnego dostępu gościa */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

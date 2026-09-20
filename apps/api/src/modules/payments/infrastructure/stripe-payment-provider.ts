@@ -12,6 +12,7 @@ import {
   type ProviderAccount,
   type ProviderEvent,
   type ProviderPayment,
+  type ProviderPaymentState,
   type ProviderPaymentStatus,
   type ProviderPayout,
   type ProviderRefund,
@@ -44,6 +45,29 @@ function toDomainStatus(status: Stripe.PaymentIntent.Status): ProviderPaymentSta
     default:
       return "PROCESSING";
   }
+}
+
+/**
+ * A PaymentIntent reduced to the outcome the domain acts on.
+ *
+ * `requires_payment_method` after a confirmation attempt is Stripe's way of
+ * saying the card was declined and the intent is ready for another one; the
+ * decline itself lives in `last_payment_error`. Reading that here keeps a
+ * pulled outcome and a pushed one indistinguishable to everything upstream.
+ */
+function toProviderPaymentState(intent: Stripe.PaymentIntent): ProviderPaymentState {
+  const error = intent.last_payment_error;
+  const declined = intent.status === "requires_payment_method" && error != null;
+
+  return {
+    providerPaymentId: intent.id,
+    status: declined ? "FAILED" : toDomainStatus(intent.status),
+    amountMinor: intent.amount,
+    currency: intent.currency.toUpperCase(),
+    failureCode: error?.decline_code ?? error?.code ?? null,
+    // Stripe's own message is Guest-safe: it never contains card data.
+    failureMessage: error?.message ?? null,
+  };
 }
 
 /** Statuses from which Stripe still allows a cancel. */
@@ -136,16 +160,51 @@ export class StripePaymentProvider implements PaymentProvider {
     }
   }
 
-  async cancelPayment(providerPaymentId: string, paymentId: string): Promise<void> {
+  /**
+   * Reads a PaymentIntent back from Stripe.
+   *
+   * This is what makes the outcome knowable without a webhook: Stripe is the
+   * authority on whether money moved, and asking it directly is the same
+   * evidence the signed event carries — just pulled instead of pushed
+   * (milestone 08 §16).
+   */
+  async retrievePayment(providerPaymentId: string): Promise<ProviderPaymentState | null> {
     try {
       const intent = await this.stripe.paymentIntents.retrieve(providerPaymentId);
-      // Best effort: a PaymentIntent that already succeeded is refunded, not
-      // cancelled, and one already cancelled needs nothing (milestone 08 §27).
-      if (!CANCELLABLE.includes(intent.status)) return;
+      return toProviderPaymentState(intent);
+    } catch (error) {
+      if (
+        error instanceof Stripe.errors.StripeError &&
+        error.code === "resource_missing"
+      ) {
+        return null;
+      }
+      throw this.wrap(error, "Nie udało się odczytać stanu płatności.");
+    }
+  }
 
-      await this.stripe.paymentIntents.cancel(providerPaymentId, undefined, {
-        idempotencyKey: `payment-cancel:${paymentId}`,
-      });
+  async cancelPayment(
+    providerPaymentId: string,
+    paymentId: string,
+  ): Promise<ProviderPaymentState | null> {
+    try {
+      const intent = await this.stripe.paymentIntents.retrieve(providerPaymentId);
+      /*
+       * Best effort: a PaymentIntent that already succeeded is refunded, not
+       * cancelled, and one already cancelled needs nothing. Either way the
+       * caller is told the real status, so a charge that landed in the gap
+       * between the hold lapsing and this call cannot be filed as a cancel
+       * (milestone 08 §27).
+       */
+      if (!CANCELLABLE.includes(intent.status)) return toProviderPaymentState(intent);
+
+      const cancelled = await this.stripe.paymentIntents.cancel(
+        providerPaymentId,
+        undefined,
+        { idempotencyKey: `payment-cancel:${paymentId}` },
+      );
+
+      return toProviderPaymentState(cancelled);
     } catch (error) {
       throw this.wrap(error, "Nie udało się anulować płatności u dostawcy.");
     }
@@ -354,21 +413,16 @@ export class StripePaymentProvider implements PaymentProvider {
 
     if (event.type.startsWith("payment_intent.")) {
       const intent = event.data.object as Stripe.PaymentIntent;
-      const error = intent.last_payment_error;
+      const state = toProviderPaymentState(intent);
 
       return {
         ...base,
         payment: {
-          providerPaymentId: intent.id,
-          amountMinor: intent.amount,
-          currency: intent.currency.toUpperCase(),
-          status:
-            event.type === "payment_intent.payment_failed"
-              ? "FAILED"
-              : toDomainStatus(intent.status),
-          failureCode: error?.code ?? error?.decline_code ?? null,
-          // Stripe's own message is Guest-safe: it never contains card data.
-          failureMessage: error?.message ?? null,
+          ...state,
+          // The event type is the more reliable signal of a decline: the
+          // intent it carries is already back at `requires_payment_method`
+          // and ready for another attempt.
+          status: event.type === "payment_intent.payment_failed" ? "FAILED" : state.status,
         },
       };
     }

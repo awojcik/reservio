@@ -102,6 +102,34 @@ describe("no invented coordinates", () => {
 });
 
 /**
+ * The basemap is a look, not an architecture. Changing it must stay a one-line
+ * change to a shared constant, pointing at a ready-made OpenFreeMap style —
+ * not a hand-rolled style object, and not a second provider creeping in behind
+ * one of the maps.
+ */
+describe("basemap", () => {
+  it("is one OpenFreeMap style, shared by every map", () => {
+    const style = source("components/map/mapStyle.ts");
+
+    expect(style).toMatch(
+      /MAP_STYLE_URL = "https:\/\/tiles\.openfreemap\.org\/styles\/[a-z0-9-]+"/,
+    );
+
+    for (const path of [
+      "components/map/PropertyMap.tsx",
+      "components/map/MiniMap.tsx",
+      "components/map/PickerMap.tsx",
+    ]) {
+      const code = source(path);
+
+      expect(code, path).toMatch(/style: MAP_STYLE_URL/);
+      // No second tile host, and no style built inline.
+      expect(code, path).not.toMatch(/mapbox|maptiler|\bstyle: \{/i);
+    }
+  });
+});
+
+/**
  * A marker and a card are the same Property or the feature is broken. Both are
  * keyed by `property.id`, which is what makes hover, selection and the scroll
  * target line up (§2).
