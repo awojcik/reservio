@@ -150,36 +150,12 @@ as_app systemctl --user enable rezervio-stack.service rezervio-backup.timer
 # ------------------------------------------------------------------ nginx
 log "Nginx (domena: $DOMAIN, storage: $STORAGE)"
 
-# Written either way, so the include in nginx.conf always resolves.
+# Zawsze, żeby include w nginx.conf zawsze się rozwiązywał — także wtedy, gdy
+# storage jest zewnętrzny i nie ma czego proxować. Ten sam skrypt generuje ten
+# fragment w CI, gdzie przechodzi przez `nginx -t`.
 install -d -m 755 /etc/nginx/snippets
-if [ "$STORAGE" = "minio" ]; then
-  # The bucket is the first path segment and nothing rewrites it: a presigned
-  # PUT signs the host and the full path, so the bytes MinIO verifies must be
-  # the bytes the browser sent. Strip or rename anything here and every upload
-  # fails with SignatureDoesNotMatch.
-  cat > /etc/nginx/snippets/rezervio-storage.conf <<STORAGECONF
-location /$STORAGE_BUCKET/ {
-    proxy_pass http://127.0.0.1:$STORAGE_HOST_PORT;
-    proxy_http_version 1.1;
-    # Must be the address the URL was signed for.
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-
-    # Photos, not JSON. Streamed rather than buffered to disk first.
-    client_max_body_size 25m;
-    proxy_request_buffering off;
-    proxy_read_timeout 120s;
-
-    # Object keys carry a UUID, so a stored photo never changes under its key.
-    add_header Cache-Control "public, max-age=31536000, immutable";
-}
-STORAGECONF
-else
-  echo "# Storage jest zewnętrzny (Spaces) — nic tu nie proxujemy." \
-    > /etc/nginx/snippets/rezervio-storage.conf
-fi
+STORAGE="$STORAGE" STORAGE_BUCKET="$STORAGE_BUCKET" STORAGE_HOST_PORT="$STORAGE_HOST_PORT" \
+  bash "$HERE/nginx-storage-snippet.sh" > /etc/nginx/snippets/rezervio-storage.conf
 
 if [ "$DOMAIN" = "_" ]; then
   SERVER_NAME="_"

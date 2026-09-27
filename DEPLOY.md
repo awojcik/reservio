@@ -756,6 +756,7 @@ i Redisa zostaje na domyślnych — bez pomiarów strojenie jest zgadywaniem.
 | `deploy/compose.prod.yml` | web · api · worker · postgres · redis |
 | `deploy/compose.storage.yml` | opcjonalne MinIO; sama obecność pliku włącza |
 | `deploy/nginx.conf` | reverse proxy, `/` → web, `/api/` → api |
+| `deploy/nginx-storage-snippet.sh` | fragment nginxa dla MinIO; CI sprawdza oba warianty |
 | `deploy/tls.sh` | Let's Encrypt dla domeny i www |
 | `deploy/env.production.example` | wzór `/opt/rezervio/.env.production` |
 | `deploy/gen-secrets.sh` | generuje hasła i klucze szyfrujące (uruchamiane lokalnie) |

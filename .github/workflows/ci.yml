@@ -46,6 +46,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The runner's default builder uses the `docker` driver, which cannot
+      # export a cache. Without this the build below fails on `cache-to`
+      # rather than on anything to do with the image.
+      - uses: docker/setup-buildx-action@v3
+
       # PostgreSQL cannot be a `services:` container here: the integration
       # tests need PostGIS, pg_trgm and pgvector together, and no published
       # image carries all three. The repo builds one — so CI builds the same
@@ -153,7 +158,19 @@ jobs:
             deploy/nginx.conf | sudo tee /etc/nginx/sites-available/rezervio > /dev/null
           sudo ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
           sudo rm -f /etc/nginx/sites-enabled/default
-          sudo nginx -t
+          sudo install -d -m 755 /etc/nginx/snippets
+
+          # Both storage variants, from the same script setup.sh runs on the
+          # droplet. The MinIO one generates a whole location block — a
+          # generated config fragment nobody parses is a failed deploy
+          # discovered at `systemctl reload`.
+          for storage in external minio; do
+            STORAGE="$storage" STORAGE_BUCKET=rezervio-photos STORAGE_HOST_PORT=9000 \
+              bash deploy/nginx-storage-snippet.sh \
+              | sudo tee /etc/nginx/snippets/rezervio-storage.conf > /dev/null
+            sudo nginx -t
+            echo "ok  STORAGE=$storage"
+          done
 
   images:
     name: images
