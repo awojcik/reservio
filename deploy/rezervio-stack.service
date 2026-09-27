@@ -1,0 +1,36 @@
+# Rezervio production stack (systemd --user, rootless Podman).
+#
+# Installed by setup.sh at ~/.config/systemd/user/ for the `rezervio` user and
+# enabled with `loginctl enable-linger`, which is what starts the user's
+# systemd session at boot instead of at first login. That combination is the
+# whole reboot story: no root service, no cron @reboot, no manual step.
+#
+#   systemctl --user status rezervio-stack
+#   systemctl --user restart rezervio-stack
+#
+# `podman compose up -d` is idempotent: it starts what is stopped and leaves
+# what is already running. Restarting this unit therefore reconciles the stack
+# with whatever release deploy.sh last recorded in .env.
+
+[Unit]
+Description=Rezervio production stack (Podman Compose)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h
+# Refuse to start rather than bring up half a stack against a missing release.
+ExecStartPre=/usr/bin/test -f %h/compose.prod.yml
+ExecStartPre=/usr/bin/test -f %h/.env
+ExecStartPre=/usr/bin/test -f %h/.env.production
+ExecStart=/usr/bin/podman compose -f %h/compose.prod.yml up -d --remove-orphans
+ExecStop=/usr/bin/podman compose -f %h/compose.prod.yml down
+# Pulling five images on a cold boot is slow on a 1 vCPU droplet.
+TimeoutStartSec=600
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

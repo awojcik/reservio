@@ -15,6 +15,7 @@ import {
   LIFECYCLE_QUEUE,
   REDIS_CONNECTION,
   queuePrefix,
+  workerConcurrency,
   type BookingLifecycleJob,
 } from "../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../infrastructure/database/database.module";
@@ -64,7 +65,7 @@ export class BookingLifecycleWorker implements OnModuleInit, OnApplicationShutdo
         if (job.name === REMINDER_JOB) return this.sendReminder(job.data.bookingId);
         return this.bookingsService.expireBookingRequest(job.data.bookingId);
       },
-      { connection: this.connection, concurrency: 4, prefix: queuePrefix(this.config) },
+      { connection: this.connection, concurrency: workerConcurrency(this.config, 4), prefix: queuePrefix(this.config) },
     );
 
     return this.worker;

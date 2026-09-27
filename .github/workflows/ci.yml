@@ -1,0 +1,171 @@
+# Rezervio CI — the four gates, plus the deployment files that are easy to
+# break and impossible to test by reading.
+#
+# Nothing here touches production and nothing here holds a production secret.
+# The database and Redis are throwaway service containers; Stripe is never
+# called, because the tests substitute the provider behind its own interface.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A new push supersedes the run it interrupted; the merge queue does not
+  # need three stale runs of the same branch.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Turbopack and Next's build both behave better with an explicit budget on
+  # a 2-core runner.
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  quality:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://rezervio:rezervio@127.0.0.1:5432/rezervio
+      REDIS_URL: redis://127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # PostgreSQL cannot be a `services:` container here: the integration
+      # tests need PostGIS, pg_trgm and pgvector together, and no published
+      # image carries all three. The repo builds one — so CI builds the same
+      # image it ships, which also proves the Containerfile still works.
+      - name: Build the PostgreSQL image
+        uses: docker/build-push-action@v6
+        with:
+          context: containers/postgres
+          file: containers/postgres/Containerfile
+          tags: rezervio-postgres:ci
+          load: true
+          cache-from: type=gha,scope=postgres
+          cache-to: type=gha,scope=postgres,mode=max
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name rezervio-db \
+            -e POSTGRES_USER=rezervio \
+            -e POSTGRES_PASSWORD=rezervio \
+            -e POSTGRES_DB=rezervio \
+            -p 5432:5432 \
+            rezervio-postgres:ci
+          for _ in $(seq 1 60); do
+            docker exec rezervio-db pg_isready -U rezervio -d rezervio -q && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL nie wstał w czasie." >&2
+          docker logs rezervio-db | tail -50
+          exit 1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Run in the same order a developer would, so the first failure is the
+      # cheapest one to understand.
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - run: pnpm test
+
+      - name: Build
+        # The web build inlines these; CI only needs them to be present and
+        # parseable, not to be the production values.
+        env:
+          NEXT_PUBLIC_API_URL: https://rezervio.pl/api
+          S3_PUBLIC_BASE_URL: https://rezervio.example.fra1.digitaloceanspaces.com
+        run: pnpm build
+
+      - name: Last database logs on failure
+        if: failure()
+        run: docker logs rezervio-db | tail -50
+
+  deploy-files:
+    name: deployment files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # These files only ever run on the droplet, where a syntax error costs
+      # a failed release. Checking them here costs seconds.
+      - name: Shell syntax
+        run: |
+          for script in deploy/*.sh; do
+            bash -n "$script" && echo "ok  $script"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # SC1091: sourced .env.production does not exist in the repo.
+          shellcheck -e SC1091 deploy/*.sh
+
+      - name: Compose file resolves
+        run: |
+          sudo apt-get install -y -qq podman-compose
+          cd deploy
+          # The values only have to be present; compose is being parsed, not run.
+          cat > .env <<'EOF'
+          REGISTRY=ghcr.io
+          IMAGE_NAMESPACE=owner/rezervio
+          RELEASE_SHA=0000000000000000000000000000000000000000
+          POSTGRES_USER=rezervio
+          POSTGRES_PASSWORD=ci
+          POSTGRES_DB=rezervio
+          EOF
+          touch .env.production
+          podman-compose -f compose.prod.yml config > /dev/null
+          echo "compose.prod.yml ok"
+
+      - name: nginx config is valid
+        run: |
+          sudo apt-get install -y -qq nginx
+          sed -e 's|__SERVER_NAME__|rezervio.pl www.rezervio.pl|g' \
+              -e 's|__WEB_PORT__|3000|g' \
+              -e 's|__API_PORT__|3001|g' \
+            deploy/nginx.conf | sudo tee /etc/nginx/sites-available/rezervio > /dev/null
+          sudo ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo nginx -t
+
+  images:
+    name: images
+    # Only for the default branch: a feature branch is deployable too, but its
+    # images are built on demand by the deploy workflow rather than on every
+    # push to every branch.
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [quality, deploy-files]
+    uses: ./.github/workflows/images.yml
+    with:
+      git_sha: ${{ github.sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write

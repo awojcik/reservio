@@ -22,6 +22,11 @@ const PRODUCTION_LIKE = {
   ICAL_URL_ENCRYPTION_KEY: "a".repeat(44),
   STRIPE_SECRET_KEY: "sk_test_abc123",
   STRIPE_WEBHOOK_SECRET: "whsec_abc123",
+  S3_ENDPOINT: "https://fra1.digitaloceanspaces.com",
+  S3_BUCKET: "rezervio-prod",
+  S3_ACCESS_KEY_ID: "spaces-key",
+  S3_SECRET_ACCESS_KEY: "spaces-secret",
+  S3_PUBLIC_BASE_URL: "https://rezervio-prod.fra1.digitaloceanspaces.com",
 };
 
 describe("environment names", () => {
@@ -101,6 +106,20 @@ describe("environment validation", () => {
     expect(() =>
       validateEnvironment({ ...PRODUCTION_LIKE, ICAL_URL_ENCRYPTION_KEY: "" }),
     ).toThrow(/ICAL_URL_ENCRYPTION_KEY/);
+  });
+
+  /**
+   * Object storage defaults to a local MinIO. In production that default is
+   * not a fallback, it is a Property photo upload signed against nothing —
+   * so it fails the deploy instead of the first Host who tries (§17).
+   */
+  it("rejects production object storage left at its local defaults", () => {
+    expect(() =>
+      validateEnvironment({ ...PRODUCTION_LIKE, S3_BUCKET: "" }),
+    ).toThrow(/S3_BUCKET/);
+    expect(() =>
+      validateEnvironment({ ...PRODUCTION_LIKE, S3_SECRET_ACCESS_KEY: "" }),
+    ).toThrow(/S3_SECRET_ACCESS_KEY/);
   });
 
   it("rejects a wildcard or plain-http origin in production", () => {

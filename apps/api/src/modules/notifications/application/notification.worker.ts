@@ -14,6 +14,7 @@ import {
   NOTIFICATIONS_QUEUE,
   REDIS_CONNECTION,
   queuePrefix,
+  workerConcurrency,
   type NotificationJob,
 } from "../../../infrastructure/queue/queue.module";
 import { OutboxService } from "../../../infrastructure/outbox/outbox.service";
@@ -80,7 +81,7 @@ export class NotificationWorker implements OnModuleInit, OnApplicationShutdown {
           throw error;
         }
       },
-      { connection: this.connection, concurrency: 4, prefix: queuePrefix(this.config) },
+      { connection: this.connection, concurrency: workerConcurrency(this.config, 4), prefix: queuePrefix(this.config) },
     );
 
     this.worker.on("failed", (job, error) => {

@@ -62,7 +62,7 @@ let CalendarSyncWorker = CalendarSyncWorker_1 = class CalendarSyncWorker {
             }
         }, {
             connection: this.connection,
-            concurrency: 2,
+            concurrency: (0, queue_module_1.workerConcurrency)(this.config, 2),
             prefix: (0, queue_module_1.queuePrefix)(this.config),
         });
         this.worker.on("failed", (job, error) => {

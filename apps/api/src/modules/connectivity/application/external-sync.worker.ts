@@ -15,6 +15,7 @@ import {
   EXTERNAL_SYNC_QUEUE_NAME,
   REDIS_CONNECTION,
   queuePrefix,
+  workerConcurrency,
   type ExternalSyncJob,
 } from "../../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../../infrastructure/database/database.module";
@@ -101,7 +102,7 @@ export class ExternalSyncWorker implements OnModuleInit, OnApplicationShutdown {
             return this.sweep();
         }
       },
-      { connection: this.connection, concurrency: 2, prefix: queuePrefix(this.config) },
+      { connection: this.connection, concurrency: workerConcurrency(this.config, 2), prefix: queuePrefix(this.config) },
     );
 
     this.worker.on("failed", (job, error) => {

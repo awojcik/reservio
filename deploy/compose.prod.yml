@@ -1,0 +1,170 @@
+# Rezervio in production — one droplet, five containers, nginx in front.
+#
+#   nginx (host)  ──▶ 127.0.0.1:3000  web
+#                 └─▶ 127.0.0.1:3001  api        (/api/ only)
+#
+#   web ─┐
+#   api ─┼─▶ postgres  (no published port)
+#        └─▶ redis     (no published port)
+#   worker ──▶ both
+#
+# Images are built in CI and pulled by tag; nothing is ever built here.
+# Interpolated variables come from /opt/rezervio/.env, which deploy.sh writes.
+# Application configuration comes from .env.production next to this file
+# (0600, /opt/rezervio/.env.production) — never in git, never off the droplet.
+#
+#   podman compose -f compose.prod.yml ps
+#   podman compose -f compose.prod.yml logs -f api
+
+services:
+  postgres:
+    # PostGIS, pg_trgm and pgvector in one image — the migrations need all
+    # three, and no upstream tag carries them together (containers/postgres).
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/postgres:${RELEASE_SHA}
+    container_name: rezervio-postgres
+    restart: unless-stopped
+    # Deliberately no `ports`. The only things that need PostgreSQL are on
+    # this network, and backup.sh reaches it with `podman exec`.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # A checkpoint storm on one vCPU is worse than a slightly older
+      # checkpoint; everything else is left at upstream defaults on purpose
+      # (milestone 13 §19 — no tuning without measurements).
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - rezervio-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [rezervio]
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: rezervio-redis
+    restart: unless-stopped
+    # Append-only, because BullMQ jobs are durable intent: a lost notification
+    # job is an email nobody sends. Availability itself never lives here.
+    command: >
+      redis-server --appendonly yes
+      --maxmemory ${REDIS_MAXMEMORY:-192mb}
+      --maxmemory-policy noeviction
+    volumes:
+      - rezervio-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [rezervio]
+    logging: *logging
+
+  api:
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/api:${RELEASE_SHA}
+    container_name: rezervio-api
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    env_file: [./.env.production]
+    environment:
+      NODE_ENV: production
+      API_PORT: "3001"
+      # The queues belong to the worker container. Both processes still
+      # *enqueue* — producing goes through the Queue, never the Worker — but
+      # only one of them consumes, and only one schedules the repeatable
+      # sweeps (apps/api/src/worker.ts).
+      DISABLE_CALENDAR_WORKER: "true"
+      DISABLE_BOOKING_WORKER: "true"
+      DISABLE_NOTIFICATION_WORKER: "true"
+      DISABLE_PAYMENT_WORKER: "true"
+      DISABLE_STAY_WORKER: "true"
+      DISABLE_SETTLEMENT_WORKER: "true"
+      DISABLE_EXTERNAL_WORKER: "true"
+      # A bounded heap fails as a GC pause and a clear error instead of the
+      # kernel OOM-killing whichever process happened to be largest.
+      NODE_OPTIONS: --max-old-space-size=${API_HEAP_MB:-384}
+    ports:
+      # Loopback only: nginx is the single public entry point. The host-side
+      # name is deliberately not API_PORT: that one is already the port the
+      # Nest process listens on *inside* the container, and a compose
+      # interpolation of the same name resolves against the service's own
+      # environment — silently pinning the published port to 3001.
+      - "127.0.0.1:${API_HOST_PORT:-3001}:3001"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [rezervio]
+    logging: *logging
+
+  worker:
+    # The same image as the API. Different command, no HTTP server, no port.
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/api:${RELEASE_SHA}
+    container_name: rezervio-worker
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    command: ["node", "dist/worker.js"]
+    env_file: [./.env.production]
+    environment:
+      NODE_ENV: production
+      # A ceiling, never a raise: every worker keeps its own value unless it
+      # asks for more than this. One vCPU runs the whole stack.
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      NODE_OPTIONS: --max-old-space-size=${WORKER_HEAP_MB:-320}
+    # No published port and nothing to serve: liveness is "the process is up",
+    # which restart:unless-stopped already covers. A queue depth probe would
+    # need Redis and would turn a Redis blip into a restart loop.
+    networks: [rezervio]
+    logging: *logging
+
+  web:
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/web:${RELEASE_SHA}
+    container_name: rezervio-web
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      # Server Components call the API over the internal network, so a page
+      # renders even while nginx or TLS is being reconfigured. The browser
+      # uses the same-origin URL baked into the bundle at build time.
+      API_INTERNAL_URL: http://api:3001/api
+      NODE_OPTIONS: --max-old-space-size=${WEB_HEAP_MB:-320}
+    ports:
+      - "127.0.0.1:${WEB_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks: [rezervio]
+    logging: *logging
+
+networks:
+  rezervio:
+    driver: bridge
+
+volumes:
+  rezervio-pgdata:
+  rezervio-redis:

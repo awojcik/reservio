@@ -15,6 +15,7 @@ import {
   HOLD_QUEUE,
   REDIS_CONNECTION,
   queuePrefix,
+  workerConcurrency,
   type BookingHoldJob,
 } from "../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../infrastructure/database/database.module";
@@ -83,7 +84,7 @@ export class BookingHoldWorker implements OnModuleInit, OnApplicationShutdown {
       },
       {
         connection: this.connection,
-        concurrency: 4,
+        concurrency: workerConcurrency(this.config, 4),
         prefix: queuePrefix(this.config),
       },
     );

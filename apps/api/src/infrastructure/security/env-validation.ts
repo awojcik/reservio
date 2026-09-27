@@ -61,6 +61,18 @@ const REQUIRED_IN_PRODUCTION = [
   "WEB_ORIGIN",
   "APP_BASE_URL",
   "ICAL_URL_ENCRYPTION_KEY",
+  /*
+   * Object storage, because its defaults are a local MinIO on localhost.
+   * Unset, the API starts happily and every Host photo upload is presigned
+   * against a host that does not exist in production — a feature that is
+   * broken for as long as nobody tries it. The container filesystem is not a
+   * fallback either: it disappears on the next deploy (milestone 13 §17).
+   */
+  "S3_ENDPOINT",
+  "S3_BUCKET",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_PUBLIC_BASE_URL",
 ] as const;
 
 /**

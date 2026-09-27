@@ -58,7 +58,7 @@ let BookingLifecycleWorker = BookingLifecycleWorker_1 = class BookingLifecycleWo
             if (job.name === REMINDER_JOB)
                 return this.sendReminder(job.data.bookingId);
             return this.bookingsService.expireBookingRequest(job.data.bookingId);
-        }, { connection: this.connection, concurrency: 4, prefix: (0, queue_module_1.queuePrefix)(this.config) });
+        }, { connection: this.connection, concurrency: (0, queue_module_1.workerConcurrency)(this.config, 4), prefix: (0, queue_module_1.queuePrefix)(this.config) });
         return this.worker;
     }
     async scheduleRequest(bookingId, deadlineAt) {

@@ -1,0 +1,74 @@
+# Rezervio web — Next.js standalone output.
+#
+# Built in CI, never on the droplet: `next build` needs more memory than a
+# 2 GB box has to spare while also running PostgreSQL. The build context is
+# the repo root.
+#   podman build -f apps/web/Containerfile -t rezervio-web .
+#
+# NEXT_PUBLIC_* values are inlined into the browser bundle at build time, and
+# next.config.ts reads two of them to derive the Content-Security-Policy and
+# the image allow-list. They are therefore build arguments, not runtime
+# environment: changing them means rebuilding the image.
+
+# ---------------------------------------------------------------- base
+FROM docker.io/library/node:22-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /repo
+
+# ---------------------------------------------------------------- deps
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/api-client/package.json packages/api-client/
+RUN pnpm install --frozen-lockfile --filter @rezervio/web...
+
+# ---------------------------------------------------------------- build
+FROM deps AS build
+
+# Same origin as the site: the browser talks to https://rezervio.pl/api, which
+# nginx routes to the API. Keeping it same-origin is what makes the session
+# cookie and the CSRF origin check work without a cross-site exception.
+ARG NEXT_PUBLIC_API_URL=https://rezervio.pl/api
+# Where Host photos are served from. next.config.ts turns this into
+# images.remotePatterns and into the CSP img-src — a wrong value here shows up
+# as photos that refuse to render, so it is asserted by the deploy smoke test.
+ARG S3_PUBLIC_BASE_URL
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV S3_PUBLIC_BASE_URL=$S3_PUBLIC_BASE_URL
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
+COPY packages/api-client packages/api-client
+COPY apps/web apps/web
+RUN pnpm --filter @rezervio/web build
+
+# `output: standalone` emits the server but not the assets it serves. The
+# targets are removed first: `cp -r a b` nests a *inside* b when b exists.
+RUN rm -rf apps/web/.next/standalone/apps/web/.next/static \
+           apps/web/.next/standalone/apps/web/public \
+  && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static \
+  && cp -r apps/web/public apps/web/.next/standalone/apps/web/public
+
+# ---------------------------------------------------------------- runner
+FROM base AS runner
+ENV NODE_ENV=production
+# nginx is the public entry point; the container listens on its own network
+# only, and compose publishes it to loopback.
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+WORKDIR /app
+
+# Self-contained: the traced node_modules come inside the standalone bundle,
+# so there is no install step and nothing to prune.
+COPY --from=build /repo/apps/web/.next/standalone ./
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

@@ -15,6 +15,7 @@ import {
   REDIS_CONNECTION,
   SYNC_QUEUE,
   queuePrefix,
+  workerConcurrency,
   type CalendarSyncJob,
 } from "../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../infrastructure/database/database.module";
@@ -77,7 +78,7 @@ export class CalendarSyncWorker implements OnModuleInit, OnApplicationShutdown {
       },
       {
         connection: this.connection,
-        concurrency: 2,
+        concurrency: workerConcurrency(this.config, 2),
         // Must match the queue, or the worker listens to a different namespace.
         prefix: queuePrefix(this.config),
       },

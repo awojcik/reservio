@@ -1,0 +1,54 @@
+# Object storage na droplecie — nakładka włączana samą obecnością tego pliku.
+#
+#   scp deploy/compose.storage.yml rezervio@droplet:/opt/rezervio/
+#
+# deploy.sh dokłada ją do compose.prod.yml, kiedy istnieje w /opt/rezervio.
+# Usunięcie pliku i ponowny deploy to wyłączenie MinIO — po przejściu na
+# zewnętrzne Spaces nie zostaje żaden martwy kontener.
+#
+# Zdjęcia idą z przeglądarki prosto do storage, presigned PUT-em. Podpis
+# obejmuje host i pełną ścieżkę, więc MinIO musi być publicznie osiągalne
+# dokładnie pod tym adresem, pod którym URL został podpisany. Stąd układ:
+#
+#   https://rezervio.pl/<bucket>/…  ──nginx──▶  127.0.0.1:9000
+#
+# Bucket jest pierwszym segmentem ścieżki (path-style), nginx niczego nie
+# przepisuje, a Host zostaje nietknięty — dlatego podpis się zgadza. Przy
+# okazji: to ten sam origin co aplikacja, więc upload nie jest cross-origin
+# i nie potrzebuje CORS-a.
+#
+# To NIE jest tak trwałe jak Spaces. Utrata dropleta to utrata zdjęć, jeśli
+# backup.sh nie zdążył ich skopiować poza host. Patrz DEPLOY.md → Storage.
+
+services:
+  minio:
+    image: docker.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: rezervio-minio
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+      # Console byłby drugą powierzchnią do wystawienia i do pilnowania.
+      # Bucket i politykę publicznego odczytu zakłada samo API przy starcie.
+      MINIO_BROWSER: "off"
+    ports:
+      # Tylko loopback — publiczny jest wyłącznie nginx.
+      - "127.0.0.1:${STORAGE_HOST_PORT:-9000}:9000"
+    volumes:
+      - rezervio-photos:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [rezervio]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  rezervio-photos:

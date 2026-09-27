@@ -27,6 +27,23 @@ export function queuePrefix(config: { get: (key: string) => string | undefined }
   return config.get("BULLMQ_PREFIX") ?? "rezervio";
 }
 
+/**
+ * A ceiling on how many jobs one worker runs at once.
+ *
+ * `WORKER_CONCURRENCY` can only *lower* the value each worker asks for, never
+ * raise it. The droplet has one vCPU, and an operator reaching for this knob
+ * is trying to calm a box down — a variable that could also multiply the load
+ * would be the wrong shape for that job.
+ */
+export function workerConcurrency(
+  config: { get: (key: string) => string | undefined },
+  requested: number,
+): number {
+  const cap = Number(config.get("WORKER_CONCURRENCY"));
+  if (!Number.isFinite(cap) || cap < 1) return requested;
+  return Math.min(requested, Math.floor(cap));
+}
+
 export const REDIS_CONNECTION = Symbol("REDIS_CONNECTION");
 export const SYNC_QUEUE = Symbol("SYNC_QUEUE");
 export const HOLD_QUEUE = Symbol("HOLD_QUEUE");

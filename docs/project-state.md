@@ -4,7 +4,7 @@
 > stąd, a po szczegóły sięgnij do [architektury](./architecture.md) i
 > [języka domenowego](./rezervio-domain-language.md).
 
-Ostatni ukończony milestone: **12 — PMS / Channel Manager Connectivity**.
+Ostatni ukończony milestone: **13 — Production Deployment**.
 
 > **To nie jest jeszcze produkcyjne wydanie.** Stripe działa wyłącznie
 > w sandboxie/trybie testowym, a klucz live zatrzymuje start procesu — w każdym
@@ -39,6 +39,7 @@ Ostatni ukończony milestone: **12 — PMS / Channel Manager Connectivity**.
 | Observability | `requestId` w każdym logu i odpowiedzi, redakcja sekretów, rozdzielone `/health` i `/ready`, taksonomia kodów błędów |
 | Hardening | Walidacja env przy starcie, guard na klucz live, cookies, ochrona Origin, rate limiting, nagłówki bezpieczeństwa, ochrona przed brute-force |
 | Connectivity | Połączenia, mapowanie obiektów, rezerwacje w obie strony, webhook + polling, rekoncyliacja; adapter Hostaway (PMS) i kanał Channex (Rezervio jako OTA) |
+| Wdrożenie | GitHub Actions → obrazy OCI w GHCR (tag = git SHA) → ręczny deploy po SSH → Podman Compose: web, api, worker, postgres, redis za nginxem. Worker to ten sam obraz co API, inna komenda. Runbook: [DEPLOY.md](../DEPLOY.md) |
 
 ## Czego celowo nie ma
 
@@ -131,7 +132,9 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 ```
 
 `pnpm test:e2e` nie istnieje; testy e2e żyją w `apps/api/tests/api.e2e.test.ts`
-i wchodzą w `pnpm test`.
+i wchodzą w `pnpm test`. Te same cztery komendy uruchamia CI
+(`.github/workflows/ci.yml`), obok `shellcheck`, `podman-compose config`
+i `nginx -t` na plikach z `deploy/`.
 
 ## Wymagania środowiska
 
@@ -183,8 +186,24 @@ Open Channel API, model mapowania, testy kontraktowe i test double.
 
 **Nie jest to działająca integracja Channex** i nie jest tak raportowana.
 
+## Wdrożenie produkcyjne
+
+Pełna procedura, łącznie z pierwszym cutoverem ze starego, wyłącznie
+frontendowego wdrożenia: [DEPLOY.md](../DEPLOY.md).
+
+Czego repozytorium **nie** jest w stanie samo zapewnić — wymaga konta albo
+dostępu:
+
+```text
+DigitalOcean Spaces (zdjęcia)      bez tego API nie wstanie: S3_* są wymagane
+bucket na backupy poza dropletem   bez tego backup.sh kończy się błędem
+konto SMTP                         bez tego powiadomienia lądują jako FAILED
+sekrety GitHuba (PROD_HOST, …)     bez tego workflow deploya się nie uruchomi
+alerty i uptime check              klikane w panelu, nie w repozytorium
+```
+
 ## Następny milestone
 
-> **Milestone 13: Reviews & Post-Stay** — zweryfikowane opinie gości po
+> **Milestone 14: Reviews & Post-Stay** — zweryfikowane opinie gości po
 > zakończonym pobycie, oceny gospodarza i obiektu, podstawy moderacji oraz
 > powiadomienie po pobycie.

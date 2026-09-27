@@ -1,0 +1,97 @@
+# Rezervio — build the three production images and push them to GHCR.
+#
+# Reusable on purpose. It is called twice:
+#   · by ci.yml on every push to master, so the common release is ready early;
+#   · by deploy-production.yml for whatever ref was chosen, so a branch or an
+#     older commit can be deployed without having been on master first.
+#
+# Both paths produce the same thing, and pushing the same content twice is a
+# no-op at the registry. Every image is tagged with the full commit SHA — that
+# is the release identity. `latest` is published too, but only from master and
+# only as a convenience: nothing deploys by it, because a tag that moves
+# cannot be rolled back to.
+name: images
+
+on:
+  workflow_call:
+    inputs:
+      git_sha:
+        description: Full 40-character commit SHA to build
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Full 40-character commit SHA to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    strategy:
+      # One failing image must not leave the other two half-published for a
+      # SHA that deploy.sh will then happily try to pull.
+      fail-fast: true
+      matrix:
+        include:
+          - image: api
+            file: apps/api/Containerfile
+            context: .
+          - image: web
+            file: apps/web/Containerfile
+            context: .
+          - image: postgres
+            file: containers/postgres/Containerfile
+            context: containers/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The package namespace is the owner, lower-cased: GHCR rejects an
+      # uppercase path, and GitHub logins are not.
+      - name: Resolve image name
+        id: name
+        run: |
+          namespace="$(echo '${{ github.repository_owner }}/rezervio' | tr '[:upper:]' '[:lower:]')"
+          echo "ref=ghcr.io/${namespace}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          # The droplet is amd64. Building arm64 as well would double the
+          # slowest job in the pipeline for an architecture nothing runs.
+          platforms: linux/amd64
+          provenance: false
+          tags: |
+            ${{ steps.name.outputs.ref }}:${{ inputs.git_sha }}
+            ${{ github.ref == 'refs/heads/master' && format('{0}:latest', steps.name.outputs.ref) || '' }}
+          # The web bundle inlines these at build time — they are baked in,
+          # not read at startup. Same origin as the site, so the session
+          # cookie and the Origin check need no cross-site exception.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://rezervio.pl/api' }}
+            S3_PUBLIC_BASE_URL=${{ vars.S3_PUBLIC_BASE_URL }}
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max

@@ -15,6 +15,7 @@ import {
   PAYMENT_REFUND_QUEUE,
   REDIS_CONNECTION,
   queuePrefix,
+  workerConcurrency,
   type PaymentCancelJob,
   type PaymentRefundJob,
 } from "../../infrastructure/queue/queue.module";
@@ -53,7 +54,7 @@ export class PaymentWorker implements OnModuleInit, OnApplicationShutdown {
         async (job) => this.payments.processRefund(job.data.refundId),
         {
           connection: this.connection,
-          concurrency: 2,
+          concurrency: workerConcurrency(this.config, 2),
           prefix: queuePrefix(this.config),
         },
       );
@@ -74,7 +75,7 @@ export class PaymentWorker implements OnModuleInit, OnApplicationShutdown {
         async (job) => this.payments.cancelProviderPayment(job.data.paymentId),
         {
           connection: this.connection,
-          concurrency: 2,
+          concurrency: workerConcurrency(this.config, 2),
           prefix: queuePrefix(this.config),
         },
       );

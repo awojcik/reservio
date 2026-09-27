@@ -15,6 +15,7 @@ import {
   SETTLEMENT_QUEUE,
   SETTLEMENT_QUEUE_NAME,
   queuePrefix,
+  workerConcurrency,
   type SettlementJob,
 } from "../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../infrastructure/database/database.module";
@@ -78,7 +79,7 @@ export class SettlementWorker implements OnModuleInit, OnApplicationShutdown {
             return this.reconcile();
         }
       },
-      { connection: this.connection, concurrency: 2, prefix: queuePrefix(this.config) },
+      { connection: this.connection, concurrency: workerConcurrency(this.config, 2), prefix: queuePrefix(this.config) },
     );
 
     this.worker.on("failed", (job, error) => {

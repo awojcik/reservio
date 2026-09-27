@@ -15,6 +15,7 @@ import {
   STAY_LIFECYCLE_QUEUE,
   STAY_QUEUE,
   queuePrefix,
+  workerConcurrency,
   type StayLifecycleJob,
 } from "../../infrastructure/queue/queue.module";
 import { DATABASE } from "../../infrastructure/database/database.module";
@@ -81,7 +82,7 @@ export class StayLifecycleWorker implements OnModuleInit, OnApplicationShutdown 
             return this.sweep();
         }
       },
-      { connection: this.connection, concurrency: 4, prefix: queuePrefix(this.config) },
+      { connection: this.connection, concurrency: workerConcurrency(this.config, 4), prefix: queuePrefix(this.config) },
     );
 
     this.worker.on("failed", (job, error) => {

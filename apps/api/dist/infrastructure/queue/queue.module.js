@@ -17,6 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QueueModule = exports.EXTERNAL_QUEUE = exports.SETTLEMENT_QUEUE = exports.STAY_QUEUE = exports.CANCEL_QUEUE = exports.REFUND_QUEUE = exports.NOTIFICATIONS_QUEUE = exports.LIFECYCLE_QUEUE = exports.HOLD_QUEUE = exports.SYNC_QUEUE = exports.REDIS_CONNECTION = exports.EXTERNAL_SYNC_QUEUE_NAME = exports.SETTLEMENT_QUEUE_NAME = exports.STAY_LIFECYCLE_QUEUE = exports.PAYMENT_CANCEL_QUEUE = exports.PAYMENT_REFUND_QUEUE = exports.NOTIFICATION_QUEUE = exports.BOOKING_LIFECYCLE_QUEUE = exports.BOOKING_HOLD_QUEUE = exports.CALENDAR_SYNC_QUEUE = void 0;
 exports.queuePrefix = queuePrefix;
+exports.workerConcurrency = workerConcurrency;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const bullmq_1 = require("bullmq");
@@ -32,6 +33,12 @@ exports.SETTLEMENT_QUEUE_NAME = "host-settlement";
 exports.EXTERNAL_SYNC_QUEUE_NAME = "external-sync";
 function queuePrefix(config) {
     return config.get("BULLMQ_PREFIX") ?? "rezervio";
+}
+function workerConcurrency(config, requested) {
+    const cap = Number(config.get("WORKER_CONCURRENCY"));
+    if (!Number.isFinite(cap) || cap < 1)
+        return requested;
+    return Math.min(requested, Math.floor(cap));
 }
 exports.REDIS_CONNECTION = Symbol("REDIS_CONNECTION");
 exports.SYNC_QUEUE = Symbol("SYNC_QUEUE");

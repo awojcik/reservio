@@ -60,7 +60,7 @@ let BookingHoldWorker = BookingHoldWorker_1 = class BookingHoldWorker {
             return this.expire(job.data.holdId);
         }, {
             connection: this.connection,
-            concurrency: 4,
+            concurrency: (0, queue_module_1.workerConcurrency)(this.config, 4),
             prefix: (0, queue_module_1.queuePrefix)(this.config),
         });
         this.worker.on("failed", (job, error) => {
