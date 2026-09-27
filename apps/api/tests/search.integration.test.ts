@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/bootstrap";
+import { applyTestEnv } from "./helpers/test-env";
 import { DATABASE } from "../src/infrastructure/database/database.module";
 import type { Database } from "../src/infrastructure/database/connection";
 import { hosts, properties } from "../src/infrastructure/database/schema";
@@ -29,7 +30,8 @@ async function search(query: string): Promise<SearchResponseDto> {
 }
 
 beforeAll(async () => {
-  process.env.DATABASE_URL ??= "postgresql://rezervio:rezervio@localhost:5432/rezervio";
+  // Before the module compiles: ConfigModule reads the environment once.
+  applyTestEnv();
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {

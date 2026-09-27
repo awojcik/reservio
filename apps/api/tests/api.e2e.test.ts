@@ -4,12 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/bootstrap";
+import { applyTestEnv } from "./helpers/test-env";
 
 /** Smoke tests: every public endpoint answers and keeps its response shape. */
 let app: NestFastifyApplication;
 
 beforeAll(async () => {
-  process.env.DATABASE_URL ??= "postgresql://rezervio:rezervio@localhost:5432/rezervio";
+  // Before the module compiles: ConfigModule reads the environment once.
+  applyTestEnv();
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {

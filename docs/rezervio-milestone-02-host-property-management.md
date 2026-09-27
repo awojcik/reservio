@@ -54,7 +54,7 @@ Zakładamy:
 
 ```text
 Frontend:       Next.js + React + TypeScript
-Backend:        NestJS + Fastify
+Backend:        NestJS + Fas
 Database:       PostgreSQL
 ORM:            Drizzle ORM
 Geo:            PostGIS

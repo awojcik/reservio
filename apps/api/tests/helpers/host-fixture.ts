@@ -16,6 +16,7 @@ import type { InventoryProvider } from "../../src/modules/connectivity/domain/in
 import { configureApp } from "../../src/bootstrap";
 import { DATABASE } from "../../src/infrastructure/database/database.module";
 import type { Database } from "../../src/infrastructure/database/connection";
+import { applyTestEnv } from "./test-env";
 import {
   adminActions,
   externalInventoryConnections,
@@ -52,14 +53,12 @@ export type TestAppOptions = {
 export async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<NestFastifyApplication> {
-  process.env.DATABASE_URL ??= "postgresql://rezervio:rezervio@localhost:5432/rezervio";
-  process.env.REDIS_URL ??= "redis://localhost:6379";
-  // These three are assigned unconditionally: the suite asserts on the
-  // behaviour they control, so inheriting whatever sits in the developer's
-  // .env would make the results depend on the machine.
-  //
-  // A deterministic encryption key.
-  process.env.ICAL_URL_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+  // Database, Redis and a deterministic encryption key — see test-env.ts for
+  // why the key is assigned unconditionally.
+  applyTestEnv();
+  // The rest below is assigned unconditionally for the same reason: the suite
+  // asserts on the behaviour these control, so inheriting the developer's .env
+  // would make the results depend on the machine.
   // The background worker would race the assertions; the queue test starts one
   // on its own terms.
   process.env.DISABLE_CALENDAR_WORKER = "true";
