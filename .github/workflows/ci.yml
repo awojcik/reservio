@@ -97,6 +97,14 @@ jobs:
       - name: Apply migrations
         run: pnpm db:migrate
 
+      # The integration suites read the seeded catalogue: search asserts on
+      # real rows, and the e2e smoke test opens a Listing by its seeded slug.
+      # `pnpm db:seed` is the documented precondition for running them
+      # (docs/project-state.md → Uruchomienie), so CI does the same thing a
+      # developer does.
+      - name: Seed the catalogue
+        run: pnpm db:seed
+
       - run: pnpm test
 
       - name: Build
