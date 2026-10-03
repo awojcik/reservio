@@ -182,10 +182,10 @@ jobs:
 
   images:
     name: images
-    # Only for the default branch: a feature branch is deployable too, but its
-    # images are built on demand by the deploy workflow rather than on every
-    # push to every branch.
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    # Only for the default branch (`main`): a feature branch is deployable
+    # too, but its images are built on demand by the deploy workflow rather
+    # than on every push to every branch.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [quality, deploy-files]
     uses: ./.github/workflows/images.yml
     with:

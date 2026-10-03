@@ -140,7 +140,13 @@ for unit in rezervio-stack.service rezervio-backup.service rezervio-backup.timer
   install -o "$APP_USER" -g "$APP_USER" -m 644 "$HERE/$unit" "$units/$unit"
 done
 
-as_app() { sudo -u "$APP_USER" XDG_RUNTIME_DIR="/run/user/$APP_UID" "$@"; }
+# `sudo -u` does not change directory, so the command inherits root's cwd —
+# usually /root, which mode 700 puts out of this user's reach. systemctl does
+# not care, but podman resolves its cwd and dies with "cannot chdir to /root".
+# Running from $APP_DIR, which the user owns, avoids the whole class.
+as_app() {
+  (cd "$APP_DIR" && sudo -u "$APP_USER" XDG_RUNTIME_DIR="/run/user/$APP_UID" "$@")
+}
 
 # Enabled, not started: there is no release to run yet. The first deploy
 # starts it, and every reboot after that does too.
@@ -162,12 +168,31 @@ if [ "$DOMAIN" = "_" ]; then
 else
   SERVER_NAME="$DOMAIN www.$DOMAIN"
 fi
+# Certbot writes its `listen 443` block and the HTTP redirect into this very
+# file, so overwriting it takes HTTPS down. Keep a copy: a template that
+# silently discards a working TLS configuration is the worst kind of
+# idempotence.
+if [ -f /etc/nginx/sites-available/rezervio ]; then
+  cp -a /etc/nginx/sites-available/rezervio \
+    "/etc/nginx/sites-available/rezervio.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
 sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
     -e "s|__WEB_PORT__|$WEB_HOST_PORT|g" \
     -e "s|__API_PORT__|$API_HOST_PORT|g" \
   "$HERE/nginx.conf" > /etc/nginx/sites-available/rezervio
 ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
 rm -f /etc/nginx/sites-enabled/default
+
+# The block certbot owns has just been overwritten along with the rest, so it
+# goes back in before nginx is asked to reload. `certbot install` only edits
+# the server config — no ACME request, no rate limit, no e-mail prompt.
+if [ "$DOMAIN" != "_" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+  log "Przywracam HTTPS z istniejącego certyfikatu"
+  certbot install --cert-name "$DOMAIN" --nginx --non-interactive \
+    || warn "Nie udało się wstawić certyfikatu — dokończ przez: bash $HERE/tls.sh"
+fi
+
 nginx -t
 systemctl reload nginx
 
@@ -180,6 +205,8 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 # ------------------------------------------------------------------ TLS
+# Only when there is no certificate yet. An existing one was already put back
+# into the freshly written server config above.
 if [ "$DOMAIN" != "_" ] && [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
   log "HTTPS dla $DOMAIN"
   ip=$(curl -fsS -4 https://icanhazip.com 2>/dev/null || echo "")
@@ -212,7 +239,8 @@ Czego jeszcze brakuje, zanim pierwszy deploy przejdzie:
      Ten klucz trafia do sekretu PROD_SSH_PRIVATE_KEY w GitHubie.
 
   3. Logowanie do GHCR, jeśli obrazy są prywatne:
-       sudo -u $APP_USER podman login ghcr.io
+       ssh $APP_USER@<droplet> 'podman login ghcr.io -u <user> --password-stdin'
+     (patrz DEPLOY.md — z roota trzeba 'sudo -iu', inaczej podman nie wejdzie w cwd)
 
 Potem: GitHub → Actions → Deploy Production → git_ref.
 Stara usługa rezervio.service (jeśli działa) zostaje nietknięta do cutoveru —

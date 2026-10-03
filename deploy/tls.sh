@@ -33,6 +33,17 @@ else
   log "Certyfikat dla $DOMAIN (www.$DOMAIN się nie rozwiązuje — pomijam)"
 fi
 
+# A certificate already on disk needs installing, not issuing. Asking ACME for
+# one we have burns a rate limit to achieve nothing, and `certbot install`
+# cannot fail for want of DNS.
+if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+  log "Certyfikat dla $DOMAIN już istnieje — wstawiam go do konfiguracji nginxa"
+  certbot install --cert-name "$DOMAIN" --nginx --non-interactive
+  nginx -t && systemctl reload nginx
+  log "HTTPS gotowe: https://$DOMAIN"
+  exit 0
+fi
+
 if [ -n "$EMAIL" ]; then
   certbot --nginx "${domains[@]}" \
     --non-interactive --agree-tos --email "$EMAIL" --redirect

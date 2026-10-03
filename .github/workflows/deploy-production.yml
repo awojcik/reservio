@@ -6,7 +6,7 @@
 #   Actions → Deploy Production → Run workflow → git_ref
 #
 # git_ref accepts a branch, a tag or a commit SHA. It is resolved to a full,
-# immutable SHA before anything is built, so "deploy master" means the master
+# immutable SHA before anything is built, so "deploy main" means the main
 # of that moment and not of whenever the job happens to reach the droplet.
 #
 # Rolling back is the same workflow with an older SHA. It does not roll the
@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       git_ref:
-        description: "Branch, tag or commit SHA to deploy (e.g. master, v0.3.0, a1b2c3d…)"
+        description: "Branch, tag or commit SHA to deploy (e.g. main, v0.3.0, a1b2c3d…)"
         required: true
-        default: master
+        default: main
         type: string
       skip_migrations:
         description: "Skip migrations (use when rolling back to an older release)"

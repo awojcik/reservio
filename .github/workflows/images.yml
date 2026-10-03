@@ -1,13 +1,13 @@
 # Rezervio — build the three production images and push them to GHCR.
 #
 # Reusable on purpose. It is called twice:
-#   · by ci.yml on every push to master, so the common release is ready early;
+#   · by ci.yml on every push to main, so the common release is ready early;
 #   · by deploy-production.yml for whatever ref was chosen, so a branch or an
-#     older commit can be deployed without having been on master first.
+#     older commit can be deployed without having been on main first.
 #
 # Both paths produce the same thing, and pushing the same content twice is a
 # no-op at the registry. Every image is tagged with the full commit SHA — that
-# is the release identity. `latest` is published too, but only from master and
+# is the release identity. `latest` is published too, but only from main and
 # only as a convenience: nothing deploys by it, because a tag that moves
 # cannot be rolled back to.
 name: images
@@ -85,7 +85,7 @@ jobs:
           provenance: false
           tags: |
             ${{ steps.name.outputs.ref }}:${{ inputs.git_sha }}
-            ${{ github.ref == 'refs/heads/master' && format('{0}:latest', steps.name.outputs.ref) || '' }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}:latest', steps.name.outputs.ref) || '' }}
           # The web bundle inlines these at build time — they are baked in,
           # not read at startup. Same origin as the site, so the session
           # cookie and the Origin check need no cross-site exception.

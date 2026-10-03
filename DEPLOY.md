@@ -14,7 +14,7 @@ Runbook jednego dropleta. Wszystko, co tu jest, dotyczy wdrożenia pod
 ```text
 GitHub
   └─ push ─────────▶ CI: lint · typecheck · test · build
-                         └─ master ─▶ obrazy → GHCR (tag = git SHA)
+                         └─ main ───▶ obrazy → GHCR (tag = git SHA)
 
   └─ Actions ──────▶ Deploy Production (ręcznie, git_ref)
                          ├─ resolve ref → niezmienny SHA
@@ -113,12 +113,25 @@ ssh root@<droplet> '
   install -m 600 -o rezervio -g rezervio /dev/stdin /opt/rezervio/.ssh/authorized_keys' \
   < ~/.ssh/rezervio_deploy.pub
 
-# 3. Logowanie do GHCR, jeśli pakiety są prywatne.
-ssh root@<droplet> 'sudo -u rezervio podman login ghcr.io'
+# 3. Logowanie do GHCR, jeśli pakiety są prywatne — jako rezervio, nie z roota.
+read -rsp "GHCR PAT (read:packages): " GHCR_PAT && echo
+printf '%s' "$GHCR_PAT" | ssh -i ~/.ssh/rezervio_deploy rezervio@<droplet> \
+  'podman login ghcr.io -u <twoj-login-github> --password-stdin'
+unset GHCR_PAT
 ```
 
+Dwie rzeczy, o które łatwo się potknąć, i dlatego jest tu właśnie tak:
+
+- **Nie `sudo -u rezervio podman …` z roota.** `sudo -u` nie zmienia katalogu,
+  więc podman dziedziczy `/root`, którego mode 700 nie wpuszcza tego
+  użytkownika — i kończy się na `cannot chdir to /root: Permission denied`.
+  `sudo -iu` (login shell) by zadziałało; wejście po SSH jako `rezervio` jest
+  prostsze i tak czy tak trzeba je sprawdzić przed pierwszym wdrożeniem.
+- **`--password-stdin`, nie prompt.** `ssh host 'polecenie'` nie ma TTY, więc
+  interaktywne pytanie o hasło nie miałoby gdzie się pojawić.
+
 Logowanie zapisuje się w `~rezervio/.config/containers/auth.json` i przeżywa
-reboot, więc robi się je raz. Jako hasła użyj **read-only** PAT-a z zakresem
+reboot, więc robi się je raz. Użyj **read-only** PAT-a z zakresem
 `read:packages` — droplet ma obrazy pobierać, nie publikować.
 
 Klucz hosta do przypięcia w GitHubie:
@@ -146,7 +159,7 @@ deploy-files   bash -n deploy/*.sh
                podman-compose config    (compose.prod.yml się rozwiązuje)
                nginx -t                 (nginx.conf jest poprawny)
 
-images         tylko master → .github/workflows/images.yml
+images         tylko main → .github/workflows/images.yml
 ```
 
 PostgreSQL nie jest zwykłym `services:`: testy integracyjne potrzebują PostGIS,
@@ -161,7 +174,7 @@ podstawiają atrapę pod interfejs `PaymentProvider`.
 
 ## Obrazy i GHCR
 
-`.github/workflows/images.yml` — wywoływany przez CI (na master) i przez deploy
+`.github/workflows/images.yml` — wywoływany przez CI (na `main`) i przez deploy
 (dla dowolnego wskazanego ref-a).
 
 ```text
@@ -170,7 +183,7 @@ ghcr.io/<owner>/rezervio/web:<git-sha>
 ghcr.io/<owner>/rezervio/postgres:<git-sha>
 ```
 
-Tagiem wydania jest **pełny SHA commita**. `latest` jest publikowany z mastera,
+Tagiem wydania jest **pełny SHA commita**. `latest` jest publikowany z `main`,
 ale nic po nim nie wdraża: tag, który się przesuwa, to tag, do którego nie da
 się wrócić.
 
@@ -190,12 +203,12 @@ Zmiana któregokolwiek z nich to **przebudowa obrazu**, nie restart kontenera.
 
 ```text
 GitHub → Actions → Deploy Production → Run workflow
-  git_ref          master | nazwa-brancha | v0.3.0 | a1b2c3d…
+  git_ref          main | nazwa-brancha | v0.3.0 | a1b2c3d…
   skip_migrations  false (true tylko przy cofaniu)
 ```
 
 Ref jest rozwiązywany do niezmiennego SHA **zanim** cokolwiek się zbuduje, więc
-„wdróż master" znaczy master z tamtej minuty, a nie z chwili, gdy job dobił do
+„wdróż main" znaczy main z tamtej minuty, a nie z chwili, gdy job dobił do
 dropleta. `concurrency: deploy-production` nie przepuszcza dwóch wdrożeń naraz
 i ich nie anuluje — przerwana w połowie migracja jest gorsza od czekania.
 
@@ -409,6 +422,31 @@ nginx -t && systemctl reload nginx
 bash /tmp/rezervio-deploy/tls.sh            # certyfikat, jeśli DNS nie był gotowy
 certbot renew --dry-run                     # odnowienia pilnuje timer certbota
 ```
+
+### Uwaga: certbot i szablon dzielą jeden plik
+
+Certbot wpisuje swój blok `listen 443` i przekierowanie z HTTP do
+`/etc/nginx/sites-available/rezervio` — tego samego pliku, który `setup.sh`
+generuje z szablonu. Dlatego `setup.sh`:
+
+```text
+1. kopiuje poprzednią wersję do rezervio.bak.<data>
+2. zapisuje szablon (tylko :80)
+3. jeśli certyfikat już jest → `certbot install --cert-name … --nginx`
+   wkłada blok 443 z powrotem, PRZED `nginx -t` i reloadem
+```
+
+Krok 3 jest tym, czego początkowo brakowało: skrypt widział istniejący
+certyfikat, uznawał, że nie ma nic do roboty, i zostawiał konfigurację bez
+HTTPS. Ręcznie to samo:
+
+```bash
+certbot install --cert-name rezervio.pl --nginx
+nginx -t && systemctl reload nginx
+```
+
+`certbot install` tylko edytuje konfigurację serwera — żadnego żądania do ACME,
+więc ani limity Let's Encrypt, ani brak DNS nie mają tu nic do rzeczy.
 
 Certbot i jego timer zostają bez zmian od poprzedniego wdrożenia. Nie ma tu
 migracji na Caddy'ego.
