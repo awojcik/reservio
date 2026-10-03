@@ -1,0 +1,19 @@
+# PostgreSQL for Rezervio: PostGIS, pg_trgm and pgvector in one image.
+#
+# No published image carries all three, and the milestone requires every
+# extension rather than dropping one. The official postgres image is the base
+# because it is genuinely multi-arch (the postgis/postgis tags publish no
+# arm64, so they cannot run on Apple Silicon), and it already trusts the PGDG
+# apt repository both extensions ship from. pg_trgm comes with contrib.
+FROM docker.io/library/postgres:17-bookworm
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+       postgresql-17-postgis-3 \
+       postgresql-17-postgis-3-scripts \
+       postgresql-17-pgvector \
+  && rm -rf /var/lib/apt/lists/*
+
+# Runs on first start of an empty data directory, before the server accepts
+# connections; migrations can then assume the extensions exist.
+COPY init-extensions.sql /docker-entrypoint-initdb.d/10-rezervio-extensions.sql

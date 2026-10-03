@@ -27,7 +27,7 @@ import type { MapBounds, SearchQuery } from "@/lib/types";
 const PropertyMap = dynamic(() => import("@/components/map/PropertyMap"), {
   ssr: false,
   loading: () => (
-    <div className="absolute inset-0 animate-pulse bg-[#EDE7DA]" aria-hidden="true" />
+    <div className="absolute inset-0 animate-pulse bg-placeholder" aria-hidden="true" />
   ),
 });
 
@@ -49,6 +49,20 @@ export function SearchExperience() {
       ? pickedId
       : null;
   const { favorites, toggleFavorite } = useFavorites();
+
+  /**
+   * The single biggest saving in the current results. Purely presentational:
+   * it earns the coral edge on the card and the lime marker on the map.
+   */
+  const bestValueId = useMemo(() => {
+    let best: (typeof results)[number] | null = null;
+    for (const result of results) {
+      if (result.price.saving > 0 && (!best || result.price.saving > best.price.saving)) {
+        best = result;
+      }
+    }
+    return best?.property.id ?? null;
+  }, [results]);
 
   // The stay travels with the guest into the detail page.
   const stayQuery = useMemo(
@@ -129,6 +143,7 @@ export function SearchExperience() {
       onHover={setHoveredId}
       onSearchArea={handleSearchArea}
       fitKey={query.bounds ? null : query.destination}
+      bestValueId={bestValueId}
     />
   );
 
@@ -199,6 +214,7 @@ export function SearchExperience() {
                       stayQuery={stayQuery}
                       selected={selectedId === result.property.id}
                       highlighted={hoveredId === result.property.id}
+                      featured={bestValueId === result.property.id}
                       favorite={favorites.includes(result.property.id)}
                       onHover={setHoveredId}
                       onSelect={setPickedId}
@@ -228,7 +244,7 @@ export function SearchExperience() {
         <button
           type="button"
           onClick={() => setMobileView(mobileView === "map" ? "list" : "map")}
-          className="inline-flex h-12 items-center gap-2 rounded-full bg-brand px-5 text-[15px] font-bold text-surface shadow-[0_8px_24px_-10px_rgba(24,34,29,0.65)]"
+          className="inline-flex h-12 items-center gap-2 rounded-full bg-brand px-5 text-[15px] font-bold text-surface shadow-[0_8px_24px_-10px_rgba(16,24,20,0.65)]"
         >
           {mobileView === "map" ? (
             <>

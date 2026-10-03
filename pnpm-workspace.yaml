@@ -1,3 +1,18 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
 allowBuilds:
   unrs-resolver: true
   sharp: true
+  esbuild: true
+  "@nestjs/core": true
+  "@scarf/scarf": false
+  "@swc/core": true
+  argon2: true
+  msgpackr-extract: true
+
+# @fastify/cookie augments FastifyInstance; two copies of fastify would
+# make that augmentation apply to a different type than Nest registers against.
+overrides:
+  fastify: "5.11.3"

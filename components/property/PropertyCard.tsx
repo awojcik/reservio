@@ -24,6 +24,8 @@ type PropertyCardProps = {
   selected?: boolean;
   /** True while the matching map marker is hovered. */
   highlighted?: boolean;
+  /** Best deal in the current results — labelled above the title. */
+  featured?: boolean;
   favorite?: boolean;
   onHover?: (id: string | null) => void;
   onSelect?: (id: string) => void;
@@ -54,6 +56,7 @@ export function PropertyCard({
   stayQuery,
   selected = false,
   highlighted = false,
+  featured = false,
   favorite = false,
   onHover,
   onSelect,
@@ -93,7 +96,7 @@ export function PropertyCard({
         />
       ) : null}
 
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[#EDE7DA]">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-placeholder">
         <ImageWithFallback
           src={property.images[0]}
           alt={`${property.title} — ${property.district}, ${property.city}`}
@@ -148,18 +151,32 @@ export function PropertyCard({
 
         <p className="mt-0.5 truncate text-[14px] text-muted">{details.join(" · ")}</p>
 
-        <div className="mt-3 text-right sm:mt-auto sm:pt-3">
-          <div className="text-[21px] leading-none font-bold tracking-tight tabular-nums">
-            {formatPrice(price.totalPrice)}
-          </div>
-          <div className="mt-1 text-[13px] font-semibold text-muted">
-            {formatNights(price.nights)} · cena całkowita
-          </div>
-          {price.saving > 0 ? (
-            <div className="mt-2">
-              <SavingBadge saving={price.saving} />
-            </div>
+        <div className="mt-3 flex items-end justify-between gap-3 sm:mt-auto sm:pt-3">
+          {/*
+            The best deal is called out in words, never by colour alone — and it
+            lives down here so the title row, and the heart with it, stays
+            identical on every card.
+          */}
+          {featured ? (
+            <p className="text-[11px] leading-tight font-extrabold tracking-[0.08em] text-ink uppercase">
+              Największa oszczędność
+            </p>
           ) : null}
+
+          <div className="ml-auto text-right">
+            {/* The total is the loudest thing on the card — that is the promise. */}
+            <div className="text-[22px] leading-none font-extrabold tracking-tight text-ink tabular-nums">
+              {formatPrice(price.totalPrice)}
+            </div>
+            <div className="mt-1 text-[13px] font-semibold text-muted">
+              {formatNights(price.nights)} · cena całkowita
+            </div>
+            {price.saving > 0 ? (
+              <div className="mt-2">
+                <SavingBadge saving={price.saving} />
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </article>

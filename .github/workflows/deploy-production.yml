@@ -1,0 +1,201 @@
+# Rezervio — deploy a chosen commit to production.
+#
+# Manual, always. There is no auto-deploy on merge: one droplet, one database,
+# and a human who knows what else is happening that afternoon.
+#
+#   Actions → Deploy Production → Run workflow → git_ref
+#
+# git_ref accepts a branch, a tag or a commit SHA. It is resolved to a full,
+# immutable SHA before anything is built, so "deploy main" means the main
+# of that moment and not of whenever the job happens to reach the droplet.
+#
+# Rolling back is the same workflow with an older SHA. It does not roll the
+# database back — see DEPLOY.md.
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Branch, tag or commit SHA to deploy (e.g. main, v0.3.0, a1b2c3d…)"
+        required: true
+        default: main
+        type: string
+      skip_migrations:
+        description: "Skip migrations (use when rolling back to an older release)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # Never two deploys at once. Queued rather than cancelled: a half-applied
+  # release that gets cancelled mid-migration is the worst of both.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  resolve:
+    name: resolve ${{ inputs.git_ref }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a short SHA or an older tag must resolve too.
+          fetch-depth: 0
+
+      - name: Resolve to an immutable SHA
+        id: resolve
+        run: |
+          ref='${{ inputs.git_ref }}'
+          # Try the ref as given, then as a remote branch.
+          sha="$(git rev-parse --verify --quiet "${ref}^{commit}" || true)"
+          if [ -z "$sha" ]; then
+            sha="$(git rev-parse --verify --quiet "origin/${ref}^{commit}" || true)"
+          fi
+          if [ -z "$sha" ]; then
+            echo "::error::Nie mogę rozwiązać '${ref}' do commita w tym repozytorium."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "### Wydanie" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ref | \`${ref}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| commit | \`${sha}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tytuł | $(git log -1 --pretty=%s "$sha") |" >> "$GITHUB_STEP_SUMMARY"
+
+  images:
+    name: images
+    needs: resolve
+    uses: ./.github/workflows/images.yml
+    with:
+      git_sha: ${{ needs.resolve.outputs.sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+
+  deploy:
+    name: deploy
+    needs: [resolve, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Gives the repo a place to require a reviewer, and records every
+    # deployment against the environment rather than only in the run log.
+    environment:
+      name: production
+      url: https://rezervio.pl
+
+    env:
+      RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
+      PROD_HOST: ${{ secrets.PROD_HOST }}
+      PROD_USER: ${{ secrets.PROD_USER }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+
+      - name: Check the deployment secrets are present
+        run: |
+          missing=""
+          [ -n "${{ secrets.PROD_HOST }}" ] || missing="$missing PROD_HOST"
+          [ -n "${{ secrets.PROD_USER }}" ] || missing="$missing PROD_USER"
+          [ -n "${{ secrets.PROD_SSH_PRIVATE_KEY }}" ] || missing="$missing PROD_SSH_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Brak sekretów repozytorium:$missing"
+            exit 1
+          fi
+
+      - name: Set up SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' '${{ secrets.PROD_SSH_PRIVATE_KEY }}' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          if [ -n "${{ secrets.PROD_SSH_HOST_KEY }}" ]; then
+            # Pinned. A deploy that accepts any host key is a deploy that can
+            # be pointed at somebody else's server.
+            printf '%s\n' '${{ secrets.PROD_SSH_HOST_KEY }}' > ~/.ssh/known_hosts
+          else
+            echo "::warning::PROD_SSH_HOST_KEY nie jest ustawiony — klucz hosta jest przyjmowany przy pierwszym połączeniu (TOFU)."
+            ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Copy the deployment files
+        # The scripts travel with the release, so what runs on the droplet is
+        # the version from the commit being deployed — never a leftover.
+        run: |
+          scp -i ~/.ssh/id_deploy -o BatchMode=yes \
+            deploy/compose.prod.yml \
+            deploy/deploy.sh \
+            deploy/rollback.sh \
+            deploy/backup.sh \
+            "$PROD_USER@$PROD_HOST:/opt/rezervio/"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$PROD_USER@$PROD_HOST" \
+            'chmod +x /opt/rezervio/*.sh'
+
+      - name: Deploy
+        run: |
+          args=""
+          if [ "${{ inputs.skip_migrations }}" = "true" ]; then
+            args="--skip-migrations"
+            echo "::warning::Migracje pominięte na życzenie."
+          fi
+          namespace="$(echo '${{ github.repository_owner }}/rezervio' | tr '[:upper:]' '[:lower:]')"
+
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$PROD_USER@$PROD_HOST" \
+            "cd /opt/rezervio && RELEASE_SHA='$RELEASE_SHA' REGISTRY=ghcr.io IMAGE_NAMESPACE='$namespace' ./deploy.sh $args"
+
+      # The droplet already proved the containers answer on loopback. This
+      # proves nginx and TLS agree with it. Skipped until PUBLIC_BASE_URL is
+      # set, which is the last step of the first cutover.
+      - name: Public smoke test
+        if: vars.PUBLIC_BASE_URL != ''
+        run: |
+          base='${{ vars.PUBLIC_BASE_URL }}'
+          fail=0
+          for path in "/" "/api/health" "/search"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$base$path" || echo 000)
+            printf '%-16s %s\n' "$path" "$code"
+            case "$code" in 2*|3*) ;; *) fail=1 ;; esac
+          done
+          [ "$fail" = "0" ] || { echo "::error::Publiczny smoke test nie przeszedł."; exit 1; }
+
+      - name: Last logs on failure
+        if: failure()
+        run: |
+          echo "::group::podman ps"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$PROD_USER@$PROD_HOST" \
+            'podman ps -a --format "{{.Names}}\t{{.Status}}\t{{.Image}}"' || true
+          echo "::endgroup::"
+          echo "::group::ostatnie logi"
+          # The application redacts secrets at the source — Authorization,
+          # Set-Cookie, provider keys, iCal tokens, door codes and search
+          # terms never reach a log line (docs/architecture.md → Redakcja).
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes "$PROD_USER@$PROD_HOST" \
+            'podman compose -f /opt/rezervio/compose.prod.yml logs --tail 80 api worker web 2>&1 | tail -200' || true
+          echo "::endgroup::"
+
+      - name: Record the release
+        if: success()
+        run: |
+          {
+            echo "### Wdrożone"
+            echo ""
+            echo "\`$RELEASE_SHA\` → https://rezervio.pl"
+            echo ""
+            echo "Cofnięcie: Actions → Deploy Production → git_ref = poprzedni SHA, skip_migrations = true."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up the key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy

@@ -67,7 +67,7 @@ export function SearchBar({ query, onPatch, className }: SearchBarProps) {
             list={listId}
             placeholder="Dokąd jedziesz?"
             aria-label="Kierunek podróży"
-            className="w-full bg-transparent text-[15px] font-bold outline-none placeholder:font-semibold placeholder:text-muted/70"
+            className="w-full bg-transparent text-[15px] font-bold outline-none placeholder:font-semibold placeholder:text-muted"
           />
           <datalist id={listId}>
             {DESTINATION_SUGGESTIONS.map((city) => (
@@ -99,7 +99,7 @@ export function SearchBar({ query, onPatch, className }: SearchBarProps) {
 
       <button
         type="submit"
-        className="flex h-14 items-center justify-center gap-2 rounded-[11px] bg-brand px-5 text-[15px] font-bold text-surface transition-colors hover:bg-[#0d2e26] lg:w-14 lg:px-0"
+        className="flex h-14 items-center justify-center gap-2 rounded-[11px] bg-brand px-5 text-[15px] font-bold text-surface transition-colors hover:bg-brand-hover lg:w-14 lg:px-0"
       >
         <Search size={18} strokeWidth={2.6} />
         <span className="lg:sr-only">Szukaj</span>

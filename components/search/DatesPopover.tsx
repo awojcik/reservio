@@ -151,7 +151,7 @@ export function DatesPopover({
                 aria-pressed={isStart || isEnd}
                 className={cn(
                   "mx-auto flex size-11 items-center justify-center rounded-[9px] text-[14px] font-bold tabular-nums transition-colors",
-                  outside && "text-muted/45",
+                  outside && "text-muted/70",
                   isPast && "cursor-not-allowed text-muted/30 line-through",
                   !isPast && !isStart && !isEnd && "hover:bg-brand/8",
                   inRange && "bg-brand/10",

@@ -1,0 +1,13 @@
+# One PostgreSQL backup run. Driven by rezervio-backup.timer.
+[Unit]
+Description=Rezervio PostgreSQL backup
+After=rezervio-stack.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h
+ExecStart=/bin/bash %h/backup.sh dump
+# A failed off-host copy must be visible, not silent: the script exits
+# non-zero and systemd records the failure.
+#   systemctl --user list-timers
+#   journalctl --user -u rezervio-backup -n 50

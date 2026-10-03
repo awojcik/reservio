@@ -1,0 +1,103 @@
+# Local infrastructure for Rezervio. Podman is the preferred runtime:
+#
+#   pnpm infra:start          (podman compose up -d, or plain podman run)
+#
+# `scripts/infra.sh` mirrors this file exactly. It exists because `podman
+# compose` delegates to an external provider (docker-compose / podman-compose)
+# that is not installed on every machine, and the milestone requires the local
+# setup to work without Docker Desktop.
+#
+# Only infrastructure is containerised — web and api run straight from pnpm,
+# which keeps the local feedback loop fast.
+services:
+  db:
+    build:
+      context: ./containers/postgres
+      dockerfile: Containerfile
+    image: localhost/rezervio-postgres:17
+    pull_policy: never
+    container_name: rezervio-db
+    environment:
+      POSTGRES_USER: rezervio
+      POSTGRES_PASSWORD: rezervio
+      POSTGRES_DB: rezervio
+    # Loopback only — see the note in scripts/infra.sh.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - rezervio-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rezervio -d rezervio"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  object-storage:
+    image: docker.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: rezervio-object-storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: rezervio
+      MINIO_ROOT_PASSWORD: rezervio-local-only
+      # The browser uploads straight to storage with a presigned PUT, which is
+      # a cross-origin request from the web app. Local development only.
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - rezervio-minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: rezervio-redis
+    # Append-only persistence: a queue that loses jobs on restart would silently
+    # skip calendar syncs. Availability itself never lives here.
+    command: redis-server --appendonly yes
+    # Loopback only — see the note in scripts/infra.sh.
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - rezervio-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  mailpit:
+    image: docker.io/axllent/mailpit:v1.21
+    container_name: rezervio-mailpit
+    # Every email the app sends locally lands here instead of the internet.
+    # 1025 is SMTP, 8025 is the web inbox.
+    # Loopback only — see the note in scripts/infra.sh.
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  rezervio-pgdata:
+  rezervio-minio:
+  rezervio-redis:

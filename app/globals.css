@@ -6,18 +6,26 @@
  * exposes them to Tailwind as `bg-surface`, `text-muted`, `border-line`, ...
  */
 :root {
-  --background: #f5f1e8;
-  --surface: #fffcf6;
+  --background: #f7f3ea;
+  --surface: #fffdf8;
 
-  --text-primary: #18221d;
-  --text-secondary: #6e756f;
+  --text-primary: #101814;
+  --text-secondary: #69716c;
 
-  --brand: #123c32;
-  --accent: #ff5b45;
-  --highlight: #d9ff66;
+  --brand: #0b2f27;
+  --accent: #ff4a32;
+  --highlight: #cfff3d;
 
-  --border: #dcd8cd;
-  --success: #197a5a;
+  --border: #d9d5ca;
+  --success: #167552;
+
+  /* Derived shades — interaction states and placeholders, so no component
+     needs a literal colour of its own. */
+  --brand-hover: #0f3d33;
+  --brand-active: #071f1a;
+  --accent-hover: #ff6349;
+  --accent-edge: #e63a1e;
+  --placeholder: #ebe4d5;
 }
 
 @theme inline {
@@ -30,6 +38,11 @@
   --color-highlight: var(--highlight);
   --color-line: var(--border);
   --color-success: var(--success);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-edge: var(--accent-edge);
+  --color-placeholder: var(--placeholder);
 
   --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 
@@ -80,6 +93,42 @@
     text-transform: uppercase;
     color: var(--text-secondary);
   }
+
+  /*
+   * Map markers are created imperatively by MapLibre, so their states live
+   * here rather than as literals in the component. Coral by default, lime for
+   * the single best-value stay, deep pine when selected — selected always wins.
+   */
+  .map-marker {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 9px;
+    border: 1px solid var(--accent-edge);
+    background: var(--accent);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgb(16 24 20 / 0.18);
+    transition:
+      background-color 150ms,
+      border-color 150ms,
+      color 150ms;
+  }
+
+  .map-marker[data-state="value"] {
+    background: var(--highlight);
+    border-color: #a8d420;
+  }
+
+  .map-marker[data-state="active"] {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: var(--surface);
+  }
 }
 
 @layer utilities {
@@ -116,7 +165,7 @@
 .maplibregl-ctrl-attrib {
   font-family: var(--font-sans);
   font-size: 10px;
-  background: rgb(255 252 246 / 0.82) !important;
+  background: color-mix(in srgb, var(--surface) 82%, transparent) !important;
 }
 
 .maplibregl-ctrl-group {

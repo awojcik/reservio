@@ -1,3 +1,18 @@
+# LEGACY — the frontend-only deployment that predates Milestone 13.
+#
+# This unit runs `node apps/web/.next/standalone/apps/web/server.js` from a git
+# checkout in /root/reservio, as root, with no API and no database. It is kept
+# here for exactly one reason: it is what is running on the droplet until the
+# first cutover finishes, and deleting it from the repo would not stop it.
+#
+# The stack that replaces it is deploy/compose.prod.yml, started by
+# deploy/rezervio-stack.service as the unprivileged `rezervio` user.
+#
+# Remove this file — and `systemctl disable --now rezervio` on the droplet —
+# once the cutover in DEPLOY.md is done and the new stack has served real
+# traffic. Do not remove it before: it is the only thing still answering on
+# rezervio.pl right now.
+
 [Unit]
 Description=Rezervio (Next.js)
 After=network.target
@@ -10,7 +25,7 @@ Environment=NODE_ENV=production
 Environment=PORT=__PORT__
 # Listen on loopback only — nginx is the public entry point.
 Environment=HOSTNAME=127.0.0.1
-ExecStart=/usr/bin/node .next/standalone/server.js
+ExecStart=/usr/bin/node apps/web/.next/standalone/apps/web/server.js
 Restart=always
 RestartSec=5
 

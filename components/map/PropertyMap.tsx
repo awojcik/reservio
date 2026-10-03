@@ -34,6 +34,8 @@ type PropertyMapProps = {
    * viewport is theirs to control).
    */
   fitKey: string | null;
+  /** The stay with the largest saving, marked in lime. */
+  bestValueId?: string | null;
 };
 
 type MarkerEntry = {
@@ -41,11 +43,11 @@ type MarkerEntry = {
   element: HTMLButtonElement;
 };
 
-const MARKER_BASE =
-  "flex h-[32px] items-center rounded-[9px] border px-2.5 text-[13px] font-extrabold tabular-nums " +
-  "transition-colors duration-150 cursor-pointer shadow-[0_1px_3px_rgba(24,34,29,0.18)]";
-const MARKER_DEFAULT = "border-[#e6412b] bg-[#FF5B45] text-[#18221D]";
-const MARKER_ACTIVE = "border-[#123C32] bg-[#123C32] text-white";
+/** Colours live in globals.css (.map-marker) — this only picks the state. */
+function markerState(active: boolean, bestValue: boolean): string {
+  if (active) return "active";
+  return bestValue ? "value" : "default";
+}
 
 export default function PropertyMap({
   results,
@@ -55,6 +57,7 @@ export default function PropertyMap({
   onHover,
   onSearchArea,
   fitKey,
+  bestValueId = null,
 }: PropertyMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -163,7 +166,8 @@ export default function PropertyMap({
 
       const element = document.createElement("button");
       element.type = "button";
-      element.className = `${MARKER_BASE} ${MARKER_DEFAULT}`;
+      element.className = "map-marker";
+      element.dataset.state = "default";
       element.textContent = label;
       element.setAttribute(
         "aria-label",
@@ -194,11 +198,11 @@ export default function PropertyMap({
   useEffect(() => {
     markersRef.current.forEach(({ element, marker }, id) => {
       const active = id === selectedId || id === hoveredId;
-      element.className = `${MARKER_BASE} ${active ? MARKER_ACTIVE : MARKER_DEFAULT}`;
-      element.style.zIndex = active ? "3" : "1";
-      marker.getElement().style.zIndex = active ? "3" : "1";
+      element.dataset.state = markerState(active, id === bestValueId);
+      element.style.zIndex = active ? "3" : id === bestValueId ? "2" : "1";
+      marker.getElement().style.zIndex = element.style.zIndex;
     });
-  }, [selectedId, hoveredId, results]);
+  }, [selectedId, hoveredId, results, bestValueId]);
 
   // --- gentle pan to the selected property -------------------------------
   useEffect(() => {
@@ -224,7 +228,7 @@ export default function PropertyMap({
 
   if (failed) {
     return (
-      <div className="flex h-full items-center justify-center border border-line bg-[#EDE7DA] p-8">
+      <div className="flex h-full items-center justify-center border border-line bg-placeholder p-8">
         <div className="max-w-[280px] text-center">
           <p className="text-[16px] font-bold">Mapa jest chwilowo niedostępna</p>
           <p className="mt-1 text-[14px] text-muted">
@@ -255,7 +259,7 @@ export default function PropertyMap({
                 north: bounds.getNorth(),
               });
             }}
-            className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full border border-brand bg-surface px-5 text-[14px] font-bold text-brand shadow-[0_4px_14px_-6px_rgba(24,34,29,0.4)] transition-colors hover:bg-brand hover:text-surface"
+            className="pointer-events-auto inline-flex h-11 items-center gap-2 rounded-full border border-brand bg-surface px-5 text-[14px] font-bold text-brand shadow-[0_4px_14px_-6px_rgba(16,24,20,0.4)] transition-colors hover:bg-brand hover:text-surface"
           >
             <Search size={15} strokeWidth={2.6} />
             Szukaj w tym obszarze

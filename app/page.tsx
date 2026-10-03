@@ -60,24 +60,32 @@ export default function HomePage() {
       <Header />
 
       <main>
-        <section className="mx-auto max-w-[1120px] px-4 pt-14 pb-16 sm:px-6 sm:pt-20 lg:pt-24">
-          <Logo size={30} asLink={false} className="mb-8" />
+        {/*
+          The brand moment, kept deliberately shallow: with the deep pine header
+          above it, a taller band would tip the page past the warm-neutral
+          balance. The search form below rises into it, so the boundary reads as
+          composed rather than stacked.
+        */}
+        <section className="bg-brand text-surface">
+          <div className="mx-auto max-w-[1120px] px-4 pt-12 pb-14 sm:px-6 sm:pt-14 lg:pt-16">
+            <Logo size={30} asLink={false} onDark className="mb-7" />
 
-          <h1 className="max-w-[16ch] text-[40px] leading-[1.02] font-bold tracking-tightest sm:text-[56px] lg:text-[64px]">
-            Podróżuj więcej.
-            <br />
-            Płać mniej za nocleg.
-          </h1>
+            <h1 className="max-w-[16ch] text-[40px] leading-[1.02] font-bold tracking-tightest sm:text-[56px] lg:text-[64px]">
+              Podróżuj więcej.
+              <br />
+              Płać mniej za nocleg.
+            </h1>
 
-          <p className="mt-5 max-w-[52ch] text-[16px] text-muted">
-            Apartamenty i domy wakacyjne z ceną całkowitą pokazaną od pierwszego ekranu.
-            Bez dopłat odkrywanych na końcu rezerwacji.
-          </p>
-
-          <div className="mt-9">
-            <HomeSearch />
+            <p className="mt-5 max-w-[52ch] text-[16px] text-surface/80">
+              Apartamenty i domy wakacyjne z ceną całkowitą pokazaną od pierwszego
+              ekranu. Bez dopłat odkrywanych na końcu rezerwacji.
+            </p>
           </div>
         </section>
+
+        <div className="mx-auto -mt-8 mb-8 max-w-[1120px] px-4 sm:px-6">
+          <HomeSearch />
+        </div>
 
         <section className="border-y border-line bg-surface">
           <div className="mx-auto max-w-[1120px] px-4 py-14 sm:px-6 sm:py-16">

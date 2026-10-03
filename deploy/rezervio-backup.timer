@@ -1,0 +1,13 @@
+# Daily, a little after the quietest hour, with a spread so a fleet of
+# droplets would not all dump at once.
+[Unit]
+Description=Daily Rezervio PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=20m
+# A droplet that was off at 03:20 still gets its backup when it comes back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

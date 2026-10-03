@@ -12,7 +12,7 @@ export function Gallery({ images, title }: GalleryProps) {
 
   return (
     <div className="grid gap-2 sm:grid-cols-[1.6fr_1fr]">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-[#EDE7DA]">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-placeholder">
         <ImageWithFallback
           src={lead}
           alt={`${title} — zdjęcie główne`}
@@ -28,7 +28,7 @@ export function Gallery({ images, title }: GalleryProps) {
           {thumbnails.map((image, index) => (
             <div
               key={image}
-              className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-[#EDE7DA]"
+              className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-placeholder"
             >
               <ImageWithFallback
                 src={image}

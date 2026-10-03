@@ -1,0 +1,2 @@
+CREATE INDEX "bookings_host_status_check_in_idx" ON "bookings" USING btree ("host_id","status","check_in");--> statement-breakpoint
+CREATE INDEX "bookings_host_check_out_idx" ON "bookings" USING btree ("host_id","check_out");

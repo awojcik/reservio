@@ -2,6 +2,7 @@ node_modules
 .next
 out
 build
+dist
 .DS_Store
 *.pem
 npm-debug.log*
@@ -11,4 +12,7 @@ yarn-error.log*
 .env*
 !.env.example
 next-env.d.ts
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Local database volume when Compose is run rootful
+.pgdata

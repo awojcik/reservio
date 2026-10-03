@@ -1,76 +1,202 @@
 #!/usr/bin/env bash
-# Rezervio — pierwsze wdrożenie na czystym dropletcie (Ubuntu, jako root).
+# Rezervio — one-time host bootstrap for the production droplet.
 #
-#   apt-get update && apt-get install -y git
-#   git clone https://github.com/awojcik/reservio.git
-#   bash reservio/deploy/setup.sh
+# Run once, as root, on a fresh Ubuntu droplet:
 #
-# Z własną domeną:  DOMAIN=example.com bash reservio/deploy/setup.sh
+#   scp -r deploy root@<droplet>:/tmp/rezervio-deploy
+#   ssh root@<droplet> 'bash /tmp/rezervio-deploy/setup.sh'
+#
+# This prepares the host and nothing else. It does not clone the repo, does
+# not install Node, and does not build the application: images are built in
+# GitHub Actions and pulled by tag. A 2 GB droplet cannot run `next build`
+# and PostgreSQL at the same time, and a box that can build is a box that
+# needs a toolchain, a source tree and a second definition of "the release".
+#
+# What it does install: Podman (rootless), a Compose provider, nginx, and a
+# dedicated unprivileged user whose systemd session brings the whole stack
+# back after a reboot.
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/root/reservio}"
 DOMAIN="${DOMAIN:-rezervio.pl}"
-PORT="${PORT:-3000}"
-REPO="${REPO:-https://github.com/awojcik/reservio.git}"
-# Optional: set EMAIL=... to obtain the certificate without any prompts.
+APP_USER="${APP_USER:-rezervio}"
+APP_DIR="${APP_DIR:-/opt/rezervio}"
+WEB_HOST_PORT="${WEB_HOST_PORT:-3000}"
+API_HOST_PORT="${API_HOST_PORT:-3001}"
+# Where Property photos live: "external" (DigitalOcean Spaces or any other
+# S3-compatible service) or "minio" (on this droplet — see DEPLOY.md).
+STORAGE="${STORAGE:-external}"
+STORAGE_BUCKET="${STORAGE_BUCKET:-rezervio-photos}"
+STORAGE_HOST_PORT="${STORAGE_HOST_PORT:-9000}"
+# Optional: EMAIL=you@example.com obtains the certificate without prompts.
 EMAIL="${EMAIL:-}"
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log() { printf "\n\033[1;32m==> %s\033[0m\n" "$*"; }
+warn() { printf "\033[1;33m    %s\033[0m\n" "$*"; }
 
 [ "$(id -u)" -eq 0 ] || { echo "Uruchom jako root."; exit 1; }
 
+# ------------------------------------------------------------------ packages
 log "Pakiety systemowe"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl git nginx ca-certificates
+apt-get install -y -qq \
+  podman podman-compose \
+  uidmap slirp4netns fuse-overlayfs \
+  nginx curl ca-certificates rclone jq acl
 
-# Next 16 requires Node >= 20.9.
-if ! command -v node >/dev/null 2>&1 ||
-   [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
-  log "Instaluję Node 22"
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt-get install -y -qq nodejs
+if ! command -v podman >/dev/null 2>&1; then
+  echo "Podman nie zainstalował się — przerwij i sprawdź źródła apt." >&2
+  exit 1
 fi
-command -v pnpm >/dev/null 2>&1 || { log "Instaluję pnpm"; npm i -g pnpm; }
 
-# A 1 GB droplet runs out of memory during `next build` without swap.
+# `podman compose` delegates to an external provider. Without one, every later
+# command in deploy.sh fails with a message that does not name the cause.
+if ! command -v podman-compose >/dev/null 2>&1 && ! podman compose version >/dev/null 2>&1; then
+  echo "Brak providera Compose (podman-compose). Zainstaluj go przed wdrożeniem." >&2
+  exit 1
+fi
+
+# ------------------------------------------------------------------ swap
+# `next build` no longer runs here, but PostgreSQL, Redis and three Node
+# processes on 2 GB still appreciate somewhere to page to. Kept from the
+# previous setup rather than removed.
 mem_mb=$(free -m | awk '/^Mem:/{print $2}')
 swap_mb=$(free -m | awk '/^Swap:/{print $2}')
-if [ "$mem_mb" -lt 2000 ] && [ "$swap_mb" -lt 1000 ]; then
+if [ "$mem_mb" -lt 4000 ] && [ "$swap_mb" -lt 1000 ]; then
   log "Mało RAM (${mem_mb} MB) — dodaję 2 GB swap"
   fallocate -l 2G /swapfile
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
   swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # Prefer reclaiming page cache over swapping a live Node heap.
+  sysctl -qw vm.swappiness=10
+  grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
 fi
 
-log "Kod aplikacji"
-if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" pull --ff-only
+# ------------------------------------------------------------------ user
+log "Użytkownik $APP_USER (rootless Podman)"
+if ! id -u "$APP_USER" >/dev/null 2>&1; then
+  # A real login shell and a home directory: `systemd --user` needs both, and
+  # that session is what restarts the stack after a reboot.
+  useradd --create-home --home-dir "$APP_DIR" --shell /bin/bash "$APP_USER"
 else
-  git clone "$REPO" "$APP_DIR"
+  warn "Użytkownik już istnieje — zostawiam bez zmian."
 fi
 
-log "Usługa systemd"
-sed -e "s|__APP_DIR__|$APP_DIR|g" -e "s|__PORT__|$PORT|g" \
-  "$APP_DIR/deploy/rezervio.service" > /etc/systemd/system/rezervio.service
-systemctl daemon-reload
-systemctl enable rezervio >/dev/null
+install -d -o "$APP_USER" -g "$APP_USER" -m 750 "$APP_DIR"
+install -d -o "$APP_USER" -g "$APP_USER" -m 750 "$APP_DIR/backups"
+install -d -o "$APP_USER" -g "$APP_USER" -m 700 "$APP_DIR/.ssh"
 
-log "Nginx (domena: $DOMAIN)"
+# Rootless Podman maps container users into this range. useradd normally
+# assigns it; an account created some other way may not have one.
+if ! grep -q "^${APP_USER}:" /etc/subuid; then
+  log "Zakresy subuid/subgid"
+  usermod --add-subuids 200000-265535 --add-subgids 200000-265535 "$APP_USER"
+fi
+
+# Without lingering, the user's systemd session dies at logout and takes the
+# containers with it — and never starts at boot. This single line is what
+# makes the stack survive a reboot.
+log "Lingering (auto-start po reboocie)"
+loginctl enable-linger "$APP_USER"
+
+# Lingering brings up the user's systemd session, and with it /run/user/<uid>.
+# `systemctl --user` below has nothing to talk to until that exists.
+APP_UID="$(id -u "$APP_USER")"
+for _ in $(seq 1 30); do
+  [ -d "/run/user/$APP_UID" ] && break
+  sleep 1
+done
+[ -d "/run/user/$APP_UID" ] \
+  || { echo "Sesja systemd użytkownika $APP_USER nie wstała (/run/user/$APP_UID)." >&2; exit 1; }
+
+# ------------------------------------------------------------------ logs
+# Podman hands container output to the journal. Uncapped, that is the one
+# thing on this box that grows without limit; 500 MB is plenty for the
+# retention an operator actually reads.
+log "Limit dziennika systemd"
+install -d -m 755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/rezervio.conf <<'JOURNAL'
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=50M
+MaxRetentionSec=2week
+JOURNAL
+systemctl restart systemd-journald
+
+# ------------------------------------------------------------------ systemd
+log "Usługa stacku (systemd --user)"
+# Every level, not just the leaf: `install -d` sets ownership on the last
+# component only, and a root-owned ~/.config makes the user's systemd silently
+# find nothing.
+units="$APP_DIR/.config/systemd/user"
+for dir in "$APP_DIR/.config" "$APP_DIR/.config/systemd" "$units"; do
+  install -d -o "$APP_USER" -g "$APP_USER" -m 755 "$dir"
+done
+for unit in rezervio-stack.service rezervio-backup.service rezervio-backup.timer; do
+  install -o "$APP_USER" -g "$APP_USER" -m 644 "$HERE/$unit" "$units/$unit"
+done
+
+# `sudo -u` does not change directory, so the command inherits root's cwd —
+# usually /root, which mode 700 puts out of this user's reach. systemctl does
+# not care, but podman resolves its cwd and dies with "cannot chdir to /root".
+# Running from $APP_DIR, which the user owns, avoids the whole class.
+as_app() {
+  (cd "$APP_DIR" && sudo -u "$APP_USER" XDG_RUNTIME_DIR="/run/user/$APP_UID" "$@")
+}
+
+# Enabled, not started: there is no release to run yet. The first deploy
+# starts it, and every reboot after that does too.
+as_app systemctl --user daemon-reload
+as_app systemctl --user enable rezervio-stack.service rezervio-backup.timer
+
+# ------------------------------------------------------------------ nginx
+log "Nginx (domena: $DOMAIN, storage: $STORAGE)"
+
+# Zawsze, żeby include w nginx.conf zawsze się rozwiązywał — także wtedy, gdy
+# storage jest zewnętrzny i nie ma czego proxować. Ten sam skrypt generuje ten
+# fragment w CI, gdzie przechodzi przez `nginx -t`.
+install -d -m 755 /etc/nginx/snippets
+STORAGE="$STORAGE" STORAGE_BUCKET="$STORAGE_BUCKET" STORAGE_HOST_PORT="$STORAGE_HOST_PORT" \
+  bash "$HERE/nginx-storage-snippet.sh" > /etc/nginx/snippets/rezervio-storage.conf
+
 if [ "$DOMAIN" = "_" ]; then
   SERVER_NAME="_"
 else
   SERVER_NAME="$DOMAIN www.$DOMAIN"
 fi
-sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" -e "s|__PORT__|$PORT|g" \
-  "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/rezervio
+# Certbot writes its `listen 443` block and the HTTP redirect into this very
+# file, so overwriting it takes HTTPS down. Keep a copy: a template that
+# silently discards a working TLS configuration is the worst kind of
+# idempotence.
+if [ -f /etc/nginx/sites-available/rezervio ]; then
+  cp -a /etc/nginx/sites-available/rezervio \
+    "/etc/nginx/sites-available/rezervio.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
+sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
+    -e "s|__WEB_PORT__|$WEB_HOST_PORT|g" \
+    -e "s|__API_PORT__|$API_HOST_PORT|g" \
+  "$HERE/nginx.conf" > /etc/nginx/sites-available/rezervio
 ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
 rm -f /etc/nginx/sites-enabled/default
+
+# The block certbot owns has just been overwritten along with the rest, so it
+# goes back in before nginx is asked to reload. `certbot install` only edits
+# the server config — no ACME request, no rate limit, no e-mail prompt.
+if [ "$DOMAIN" != "_" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+  log "Przywracam HTTPS z istniejącego certyfikatu"
+  certbot install --cert-name "$DOMAIN" --nginx --non-interactive \
+    || warn "Nie udało się wstawić certyfikatu — dokończ przez: bash $HERE/tls.sh"
+fi
+
 nginx -t
 systemctl reload nginx
 
+# ------------------------------------------------------------------ firewall
 log "Firewall"
 if command -v ufw >/dev/null 2>&1; then
   ufw allow OpenSSH >/dev/null 2>&1 || true
@@ -78,27 +204,45 @@ if command -v ufw >/dev/null 2>&1; then
   ufw --force enable >/dev/null 2>&1 || true
 fi
 
-log "Build i start aplikacji"
-bash "$APP_DIR/deploy/deploy.sh" --no-pull
-
-ip=$(curl -fsS -4 https://icanhazip.com 2>/dev/null || echo "")
-
-# HTTPS only makes sense once the A record already points here — otherwise
-# certbot fails the challenge and would abort an otherwise finished deploy.
-if [ "$DOMAIN" != "_" ]; then
+# ------------------------------------------------------------------ TLS
+# Only when there is no certificate yet. An existing one was already put back
+# into the freshly written server config above.
+if [ "$DOMAIN" != "_" ] && [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
   log "HTTPS dla $DOMAIN"
+  ip=$(curl -fsS -4 https://icanhazip.com 2>/dev/null || echo "")
   domain_ip=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)
 
   if [ -z "$domain_ip" ]; then
-    echo "Domena $DOMAIN jeszcze się nie rozwiązuje — pomijam certyfikat."
-    echo "Po ustawieniu rekordów A uruchom: bash $APP_DIR/deploy/tls.sh"
+    warn "Domena $DOMAIN jeszcze się nie rozwiązuje — pomijam certyfikat."
+    warn "Po ustawieniu rekordów A: bash $HERE/tls.sh"
   elif [ -n "$ip" ] && [ "$domain_ip" != "$ip" ]; then
-    echo "$DOMAIN wskazuje na $domain_ip, a ten droplet ma $ip — pomijam certyfikat."
-    echo "Popraw rekord A, potem uruchom: bash $APP_DIR/deploy/tls.sh"
+    warn "$DOMAIN wskazuje na $domain_ip, a ten droplet ma $ip — pomijam certyfikat."
   else
-    bash "$APP_DIR/deploy/tls.sh" || echo "Certyfikat się nie udał — aplikacja działa po HTTP."
+    EMAIL="$EMAIL" bash "$HERE/tls.sh" || warn "Certyfikat się nie udał — dokończ przez tls.sh."
   fi
+else
+  warn "Certyfikat już istnieje albo domena to '_' — pomijam tls.sh."
 fi
 
-log "Gotowe: http://${ip:-IP_DROPLETA}"
-[ "$DOMAIN" != "_" ] && echo "Docelowo: https://$DOMAIN"
+# ------------------------------------------------------------------ done
+cat <<DONE
+
+$(printf "\033[1;32m==> Host gotowy.\033[0m")
+
+Czego jeszcze brakuje, zanim pierwszy deploy przejdzie:
+
+  1. $APP_DIR/.env.production   (0600, własność $APP_USER)
+     Wzór: deploy/env.production.example — przenieś go i uzupełnij sekrety.
+
+  2. Klucz publiczny SSH dla użytkownika $APP_USER:
+       $APP_DIR/.ssh/authorized_keys   (0600)
+     Ten klucz trafia do sekretu PROD_SSH_PRIVATE_KEY w GitHubie.
+
+  3. Logowanie do GHCR, jeśli obrazy są prywatne:
+       ssh $APP_USER@<droplet> 'podman login ghcr.io -u <user> --password-stdin'
+     (patrz DEPLOY.md — z roota trzeba 'sudo -iu', inaczej podman nie wejdzie w cwd)
+
+Potem: GitHub → Actions → Deploy Production → git_ref.
+Stara usługa rezervio.service (jeśli działa) zostaje nietknięta do cutoveru —
+procedura w DEPLOY.md, sekcja "Pierwszy cutover".
+DONE

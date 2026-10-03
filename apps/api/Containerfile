@@ -1,0 +1,76 @@
+# Rezervio API — and, with a different command, the background worker.
+#
+# One image serves both: `node dist/main.js` listens for HTTP, `node
+# dist/worker.js` consumes the BullMQ queues. Same code, same migrations, same
+# configuration surface — two processes only because a calendar sync should
+# not share an event loop with a Guest's request (see src/worker.ts).
+#
+# Built in CI, never on the droplet. The build context is the repo root:
+#   podman build -f apps/api/Containerfile -t rezervio-api .
+
+# ---------------------------------------------------------------- base
+FROM docker.io/library/node:22-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+# Without this pnpm refuses to clear a modules directory when there is no TTY.
+ENV CI=true
+# Corepack ships with Node and pins the exact pnpm from `packageManager`, so
+# the image cannot drift from the version the lockfile was written with.
+RUN corepack enable
+WORKDIR /repo
+
+# ---------------------------------------------------------------- manifests
+# Only the package manifests, so every layer below survives a source-only
+# change. Both install stages branch from here rather than from each other:
+# a second install on top of an existing node_modules would purge and redo it.
+FROM base AS manifests
+# argon2 falls back to compiling from source when no prebuild matches the
+# platform. Cheaper to always carry the toolchain than to debug its absence.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/api-client/package.json packages/api-client/
+
+# ---------------------------------------------------------------- build
+FROM manifests AS deps
+RUN pnpm install --frozen-lockfile --filter @rezervio/api...
+
+FROM deps AS build
+COPY apps/api apps/api
+RUN pnpm --filter @rezervio/api build
+
+# ---------------------------------------------------------------- runtime deps
+FROM manifests AS runtime-deps
+RUN pnpm install --frozen-lockfile --prod --filter @rezervio/api...
+
+# ---------------------------------------------------------------- runner
+FROM base AS runner
+ENV NODE_ENV=production
+
+# The repo layout is preserved on purpose. pnpm links a package's own
+# node_modules *relatively* into the store at the workspace root, so flattening
+# the two directories together would leave every one of those links dangling.
+WORKDIR /app
+COPY --from=runtime-deps /repo/node_modules ./node_modules
+COPY --from=runtime-deps /repo/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build /repo/apps/api/dist ./apps/api/dist
+# Migrations are data, not code: dist/infrastructure/database/migrate.js
+# resolves them at ../../../drizzle, which is /app/apps/api/drizzle from there.
+COPY apps/api/drizzle ./apps/api/drizzle
+COPY apps/api/package.json ./apps/api/package.json
+
+WORKDIR /app/apps/api
+USER node
+
+# Liveness for `podman ps`. Node 22 has fetch built in, so this needs neither
+# curl nor an extra layer. /api/health is the process alone — it deliberately
+# does not touch PostgreSQL or Redis, so a database blip cannot restart the
+# API. Readiness is the other endpoint, and deploy.sh polls it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.API_PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+EXPOSE 3001
+CMD ["node", "dist/main.js"]

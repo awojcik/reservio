@@ -1,0 +1,21 @@
+# Nothing here belongs in a build context: it is either rebuilt inside the
+# image, machine-specific, or a secret.
+.git
+.github
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/tsconfig.tsbuildinfo
+**/*.tsbuildinfo
+.env
+.env.*
+!.env.example
+deploy/.env.production
+docs
+*.md
+!README.md
+.vscode
+.idea
+.DS_Store
+coverage
