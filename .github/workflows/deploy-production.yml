@@ -126,9 +126,34 @@ jobs:
             printf '%s\n' '${{ secrets.PROD_SSH_HOST_KEY }}' > ~/.ssh/known_hosts
           else
             echo "::warning::PROD_SSH_HOST_KEY nie jest ustawiony — klucz hosta jest przyjmowany przy pierwszym połączeniu (TOFU)."
-            ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            # Scanned for the very string we are about to connect to, so this
+            # branch cannot mismatch. Not hashed: a readable known_hosts is
+            # worth more here than hiding a hostname the workflow prints anyway.
+            ssh-keyscan -T 10 "$PROD_HOST" > ~/.ssh/known_hosts 2>/dev/null || true
           fi
           chmod 600 ~/.ssh/known_hosts
+
+          # Checked here, not discovered by the first scp. On its own,
+          # "Host key verification failed" says nothing about the cause — and
+          # the cause is almost always a pinned key scanned for a different
+          # spelling of the host than PROD_HOST: an IP against a name, or the
+          # other way round. known_hosts keys entries by that exact string.
+          if ! ssh-keygen -F "$PROD_HOST" -f ~/.ssh/known_hosts > /dev/null 2>&1; then
+            echo "::error::known_hosts nie ma wpisu dla hosta z PROD_HOST."
+            {
+              echo "Co dalej, w kolejności od najprostszego:"
+              echo ""
+              echo "  1. Usuń sekret PROD_SSH_HOST_KEY. Workflow zrobi wtedy keyscan"
+              echo "     sam, dla dokładnie tego hosta, z którym się łączy — i nie ma"
+              echo "     jak się rozjechać."
+              echo ""
+              echo "  2. Albo ustaw go ponownie, dla TEGO SAMEGO zapisu hosta co"
+              echo "     PROD_HOST (jeśli PROD_HOST to adres IP, to też IP):"
+              echo "       ssh-keyscan <to-co-w-PROD_HOST>"
+              echo "     Wklej cały wynik, wszystkie linie."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Copy the deployment files
         # The scripts travel with the release, so what runs on the droplet is
