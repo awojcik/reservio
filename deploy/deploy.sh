@@ -85,6 +85,72 @@ fi
 perms=$(stat -c '%a' "$APP_ENV_FILE" 2>/dev/null || stat -f '%A' "$APP_ENV_FILE")
 [ "$perms" = "600" ] || die ".env.production ma prawa $perms — wymagane 600 (chmod 600 $APP_ENV_FILE)."
 
+# ------------------------------------------------------------------ preflight
+# Every configuration problem at once, before a single container is touched.
+# The alternative is one crash loop per unfilled value, each discovered by its
+# own failed release — which is exactly what this check cost to learn.
+# `|| true` on both: the script runs under `set -o pipefail`, where a grep
+# that finds nothing and a base64 that cannot decode are *failures*. Both are
+# legitimate answers here — and without the guard the script dies silently,
+# with no output at all, in exactly the cases these checks exist for.
+env_value() {
+  grep -E "^$1=" "$APP_ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+# GNU wants -d, BSD wants -D, and undecodable input is a valid finding rather
+# than an error: it comes back as 0 bytes and fails the comparison below.
+b64_bytes() {
+  printf '%s' "$1" \
+    | { base64 -d 2>/dev/null || base64 -D 2>/dev/null || true; } \
+    | wc -c | tr -d ' '
+}
+
+problems=""
+
+# A placeholder is not a value. It passes every "is it set?" test and then
+# fails inside the application, one container at a time.
+unfilled=$(grep -E '^[A-Z0-9_]+=.*ZMIE' "$APP_ENV_FILE" | cut -d= -f1 | tr '\n' ' ' || true)
+if [ -n "$unfilled" ]; then
+  problems="$problems
+  niewypełnione (został placeholder ZMIEŃ): $unfilled"
+fi
+
+# AES-256-GCM takes exactly 32 bytes. A short key is the one mistake the app
+# cannot work around: it refuses to boot, and says so from inside a stack
+# trace six times over as the container restarts. Empty is fine — the stay and
+# provider ciphers fall back to the iCal key on purpose.
+for key in ICAL_URL_ENCRYPTION_KEY STAY_SENSITIVE_DATA_ENCRYPTION_KEY \
+           PROVIDER_CREDENTIALS_ENCRYPTION_KEY; do
+  value=$(env_value "$key")
+  if [ -n "$value" ]; then
+    bytes=$(b64_bytes "$value")
+    if [ "$bytes" != "32" ]; then
+      problems="$problems
+  $key: $bytes bajtów po zdekodowaniu base64, wymagane 32"
+    fi
+  fi
+done
+
+# The password PostgreSQL is created with and the one the app connects with
+# are two separate variables, and only the database notices when they differ —
+# as "password authentication failed", long after the deploy went green.
+pg_pass=$(env_value POSTGRES_PASSWORD)
+db_url=$(env_value DATABASE_URL)
+if [ "${SKIP_DB_PASSWORD_CHECK:-0}" != "1" ] && [ -n "$pg_pass" ] && [ -n "$db_url" ]; then
+  case "$db_url" in
+    *"$pg_pass"*) ;;
+    *) problems="$problems
+  POSTGRES_PASSWORD nie występuje w DATABASE_URL — to musi być to samo hasło
+    (jeśli jest tam zakodowane procentowo, ustaw SKIP_DB_PASSWORD_CHECK=1)" ;;
+  esac
+fi
+
+if [ -n "$problems" ]; then
+  printf '%s\n' "$problems" >&2
+  die "Konfiguracja w $APP_ENV_FILE jest niekompletna. Nic nie zostało zmienione.
+    Hasła i klucze wygenerujesz jednym przebiegiem: bash deploy/gen-secrets.sh"
+fi
+
 API_IMAGE="$REGISTRY/$IMAGE_NAMESPACE/api:$RELEASE_SHA"
 WEB_IMAGE="$REGISTRY/$IMAGE_NAMESPACE/web:$RELEASE_SHA"
 PG_IMAGE="$REGISTRY/$IMAGE_NAMESPACE/postgres:$RELEASE_SHA"
