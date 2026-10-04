@@ -29,6 +29,8 @@ let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
             endpoint,
             region: config.get("S3_REGION") ?? "us-east-1",
             forcePathStyle: config.get("S3_FORCE_PATH_STYLE") !== "false",
+            requestChecksumCalculation: "WHEN_REQUIRED",
+            responseChecksumValidation: "WHEN_REQUIRED",
             credentials: {
                 accessKeyId: config.get("S3_ACCESS_KEY_ID") ?? "rezervio",
                 secretAccessKey: config.get("S3_SECRET_ACCESS_KEY") ?? "rezervio-local-only",
