@@ -6,11 +6,12 @@ import { S3ObjectStorage } from "../src/modules/storage/s3-object-storage";
 /**
  * The presigned upload URL, as the browser will receive it.
  *
- * `ImageManager` PUTs the file with one header — Content-Type — and nothing
- * else. Everything the provider needs to verify must therefore be in the URL,
- * and nothing may be in it that the provider does not implement: the query
- * string is part of what the signature covers, so one unexpected parameter
- * turns into `SignatureDoesNotMatch` against DigitalOcean Spaces.
+ * Two things have to hold at once. Nothing may be in the query string that
+ * the provider does not implement, because the query string is part of what
+ * the signature covers and one unexpected parameter turns into
+ * `SignatureDoesNotMatch` against DigitalOcean Spaces. And the signed header
+ * set has to be exactly what `uploadHeaders()` in the web app sends — a
+ * header that is signed but not sent fails the upload just as surely.
  */
 function storageFor(values: Record<string, string>): S3ObjectStorage {
   return new S3ObjectStorage({
@@ -47,9 +48,15 @@ describe("presigned upload URL", () => {
     expect(extra).toEqual([]);
   });
 
-  it("signs only the host, so Content-Type alone is enough to send", async () => {
+  /**
+   * Pinned exactly, in both directions. A header added here and not sent by
+   * the uploader fails every upload; one removed here and still sent is
+   * ignored, and the photo goes up private. `uploadHeaders()` in the web app
+   * is the other half of this contract.
+   */
+  it("signs the host and the ACL, and nothing else", async () => {
     const url = await presign();
-    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host;x-amz-acl");
   });
 
   it("addresses a Spaces bucket by subdomain, not by path", async () => {
@@ -71,21 +78,23 @@ describe("presigned upload URL", () => {
 
   /**
    * The photo has to be readable by anyone the moment it is uploaded, and the
-   * only mechanism that works on every provider is the per-object ACL: this
-   * bucket's owner cannot set a bucket policy at all (Spaces refuses
-   * PutBucketPolicy even to a Full Access key), and a Listing photo whose URL
-   * answers 403 is a broken page.
+   * only mechanism available here is the per-object ACL: this bucket's owner
+   * cannot set a bucket policy at all (Spaces refuses PutBucketPolicy even to
+   * a Full Access key), and a Listing photo whose URL answers 403 is a broken
+   * page.
    *
-   * It must arrive as a *query parameter*. Hoisted there by the presigner, the
-   * browser sends nothing extra; left in the signed headers, every upload
-   * would need `x-amz-acl` added by hand in the uploader — and would fail
-   * with a signature error until someone did.
+   * The ACL must NOT be in the query string, which is where the presigner
+   * puts `x-amz-*` headers unless told otherwise. Measured against the real
+   * bucket: in the query, Spaces ignores it and the object stays private; as
+   * a signed header, the object is public. Both upload with a 200, so this
+   * assertion is the only thing standing between a working photo and one that
+   * silently never loads.
    */
-  it("asks for a publicly readable object, via the query and not a header", async () => {
+  it("asks for a publicly readable object, as a signed header not a query parameter", async () => {
     const url = await presign();
 
-    expect(url.searchParams.get("x-amz-acl")).toBe("public-read");
-    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
+    expect(url.searchParams.get("x-amz-acl")).toBeNull();
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toContain("x-amz-acl");
   });
 
   it("expires, because an upload URL is a credential", async () => {

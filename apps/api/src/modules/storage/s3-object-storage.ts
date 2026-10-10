@@ -112,29 +112,40 @@ export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
        * Public on the object itself, not only through the bucket.
        *
        * A Listing photo is public content — that is why reads are not signed.
-       * The bucket-wide policy below covers it, but only on a bucket *this*
-       * code created, and a managed provider may refuse to set one at all:
+       * A bucket-wide policy would cover it, but only on a bucket *this* code
+       * created, and a managed provider may refuse to set one at all:
        * DigitalOcean Spaces answers PutBucketPolicy with `AccessDenied` on a
        * Limited Access key and a bare `403` even on a Full Access one, while
        * honouring a per-object ACL perfectly well.
-       *
-       * The per-object ACL is the part every S3 implementation agrees on, so
-       * the photo is readable whoever made the bucket and however they set it
-       * up. It costs the browser nothing: the presigner hoists `x-amz-acl`
-       * into the query string rather than the signed headers, so the upload
-       * still sends Content-Type and nothing else.
-       *
-       * Note for anyone testing locally: MinIO ignores object ACLs entirely
-       * and answers only to its bucket policy, so this line is a no-op there.
-       * It is not dead code — it is what makes production work.
        */
       ACL: "public-read",
     });
 
-    // The URL itself is a credential — it is returned to its owner and never
-    // logged (domain language §11).
+    /*
+     * The ACL has to travel as a signed *header*, not a query parameter.
+     *
+     * Left to itself the presigner hoists every `x-amz-*` header into the
+     * query string, and Spaces then ignores the ACL outright: measured
+     * against the real bucket, a presigned PUT carrying `x-amz-acl` in the
+     * query uploads fine and leaves the object private, while the same ACL
+     * as a signed header makes it public. Both forms return 200, so the
+     * difference is invisible at upload time and only shows up later, as a
+     * photo that will not load.
+     *
+     * `unhoistableHeaders` keeps it in the headers and `signableHeaders` puts
+     * it in the signature, which means the uploader MUST send
+     * `x-amz-acl: public-read` — see `uploadHeaders()` in the web app, and
+     * the test pinning this signed-header set. Sending it or not is not
+     * optional: a missing signed header fails the upload outright, which is
+     * the behaviour we want over silently private photos.
+     *
+     * The URL itself is a credential — it is returned to its owner and never
+     * logged (domain language §11).
+     */
     const uploadUrl = await getSignedUrl(this.client, command, {
       expiresIn: UPLOAD_URL_TTL_SECONDS,
+      unhoistableHeaders: new Set(["x-amz-acl"]),
+      signableHeaders: new Set(["x-amz-acl"]),
     });
 
     return {

@@ -80,6 +80,8 @@ let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
         });
         const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(this.client, command, {
             expiresIn: UPLOAD_URL_TTL_SECONDS,
+            unhoistableHeaders: new Set(["x-amz-acl"]),
+            signableHeaders: new Set(["x-amz-acl"]),
         });
         return {
             uploadUrl,

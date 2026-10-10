@@ -8,6 +8,7 @@ import { ApiError, type HostPropertyImage } from "@rezervio/api-client";
 import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import { useToast } from "@/components/ui/Toast";
 import { apiClient } from "@/lib/api";
+import { uploadHeaders } from "@/lib/upload";
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -251,7 +252,11 @@ function putWithProgress(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", url);
-    request.setRequestHeader("Content-Type", file.type);
+
+    // Exactly the headers the API signed — see `uploadHeaders`.
+    for (const [header, value] of Object.entries(uploadHeaders(file.type))) {
+      request.setRequestHeader(header, value);
+    }
 
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) {
