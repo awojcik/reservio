@@ -76,6 +76,7 @@ let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
             Bucket: this.bucket,
             Key: request.objectKey,
             ContentType: request.contentType,
+            ACL: "public-read",
         });
         const uploadUrl = await (0, s3_request_presigner_1.getSignedUrl)(this.client, command, {
             expiresIn: UPLOAD_URL_TTL_SECONDS,

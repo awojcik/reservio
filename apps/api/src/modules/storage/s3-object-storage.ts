@@ -108,6 +108,27 @@ export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
       Bucket: this.bucket,
       Key: request.objectKey,
       ContentType: request.contentType,
+      /*
+       * Public on the object itself, not only through the bucket.
+       *
+       * A Listing photo is public content — that is why reads are not signed.
+       * The bucket-wide policy below covers it, but only on a bucket *this*
+       * code created, and a managed provider may refuse to set one at all:
+       * DigitalOcean Spaces answers PutBucketPolicy with `AccessDenied` on a
+       * Limited Access key and a bare `403` even on a Full Access one, while
+       * honouring a per-object ACL perfectly well.
+       *
+       * The per-object ACL is the part every S3 implementation agrees on, so
+       * the photo is readable whoever made the bucket and however they set it
+       * up. It costs the browser nothing: the presigner hoists `x-amz-acl`
+       * into the query string rather than the signed headers, so the upload
+       * still sends Content-Type and nothing else.
+       *
+       * Note for anyone testing locally: MinIO ignores object ACLs entirely
+       * and answers only to its bucket policy, so this line is a no-op there.
+       * It is not dead code — it is what makes production work.
+       */
+      ACL: "public-read",
     });
 
     // The URL itself is a credential — it is returned to its owner and never

@@ -69,6 +69,25 @@ describe("presigned upload URL", () => {
     expect(url.pathname).toBe("/rezervio-local/properties/abc/photo.jpg");
   });
 
+  /**
+   * The photo has to be readable by anyone the moment it is uploaded, and the
+   * only mechanism that works on every provider is the per-object ACL: this
+   * bucket's owner cannot set a bucket policy at all (Spaces refuses
+   * PutBucketPolicy even to a Full Access key), and a Listing photo whose URL
+   * answers 403 is a broken page.
+   *
+   * It must arrive as a *query parameter*. Hoisted there by the presigner, the
+   * browser sends nothing extra; left in the signed headers, every upload
+   * would need `x-amz-acl` added by hand in the uploader — and would fail
+   * with a signature error until someone did.
+   */
+  it("asks for a publicly readable object, via the query and not a header", async () => {
+    const url = await presign();
+
+    expect(url.searchParams.get("x-amz-acl")).toBe("public-read");
+    expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
+  });
+
   it("expires, because an upload URL is a credential", async () => {
     const url = await presign();
     expect(Number(url.searchParams.get("X-Amz-Expires"))).toBeGreaterThan(0);
