@@ -2,32 +2,63 @@ import type { NextConfig } from "next";
 
 const DEFAULT_STORAGE_BASE_URL = "http://localhost:9000/rezervio-local";
 
+const SPACES_SUFFIX = ".digitaloceanspaces.com";
+
 /**
- * Photos a Host uploads are served straight from the object storage, so the
- * allow-list is derived from S3_PUBLIC_BASE_URL rather than hard-coded: moving
- * from local MinIO to DigitalOcean Spaces is then an environment change, not a
- * code change.
+ * Every host a Property photo legitimately travels over, derived from the one
+ * configured value.
+ *
+ * DigitalOcean Spaces serves a bucket under two names: the origin,
+ * `<bucket>.<region>.digitaloceanspaces.com`, and a CDN edge with `.cdn.`
+ * inserted. They are not interchangeable here, and a photo needs both:
+ *
+ *   - an upload goes to the origin, always, because the presigner signs the
+ *     host and it signs S3_ENDPOINT's;
+ *   - a read goes wherever S3_PUBLIC_BASE_URL points, which in production is
+ *     the edge.
+ *
+ * Allow-listing only the configured name leaves the other half broken, and
+ * neither half fails loudly: the image optimiser answers 400 for a host that
+ * is not on its list, and CSP blocks the upload in the browser with nothing
+ * but a console line. So both names go on the list whenever the configured
+ * one is a Spaces host; anything else (local MinIO) has no sibling.
  */
-function storageRemotePatterns(): NonNullable<
-  NonNullable<NextConfig["images"]>["remotePatterns"]
-> {
+function storageUrls(): URL[] {
   const base = process.env.S3_PUBLIC_BASE_URL ?? DEFAULT_STORAGE_BASE_URL;
 
+  let url: URL;
   try {
-    const url = new URL(base);
-    return [
-      {
-        protocol: url.protocol.replace(":", "") as "http" | "https",
-        hostname: url.hostname,
-        ...(url.port ? { port: url.port } : {}),
-        pathname: "/**",
-      },
-    ];
+    url = new URL(base);
   } catch {
     // A malformed value should not take the whole build down; the images
     // simply will not be allow-listed, which is visible immediately.
     return [];
   }
+
+  const sibling = spacesSibling(url);
+  return sibling ? [url, sibling] : [url];
+}
+
+function spacesSibling(url: URL): URL | null {
+  if (!url.hostname.endsWith(SPACES_SUFFIX)) return null;
+
+  const cdn = `.cdn${SPACES_SUFFIX}`;
+  const sibling = new URL(url);
+  sibling.hostname = url.hostname.endsWith(cdn)
+    ? url.hostname.replace(cdn, SPACES_SUFFIX)
+    : url.hostname.replace(SPACES_SUFFIX, cdn);
+  return sibling;
+}
+
+function storageRemotePatterns(): NonNullable<
+  NonNullable<NextConfig["images"]>["remotePatterns"]
+> {
+  return storageUrls().map((url) => ({
+    protocol: url.protocol.replace(":", "") as "http" | "https",
+    hostname: url.hostname,
+    ...(url.port ? { port: url.port } : {}),
+    pathname: "/**",
+  }));
 }
 
 /**
@@ -45,7 +76,7 @@ function storageRemotePatterns(): NonNullable<
  */
 function contentSecurityPolicy(): string {
   const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api");
-  const storageOrigin = originOf(process.env.S3_PUBLIC_BASE_URL ?? DEFAULT_STORAGE_BASE_URL);
+  const storageOrigins = storageUrls().map((url) => url.origin);
   const development = process.env.NODE_ENV === "development";
 
   const directives: Record<string, string[]> = {
@@ -68,7 +99,7 @@ function contentSecurityPolicy(): string {
       "data:",
       "blob:",
       "https://images.unsplash.com",
-      storageOrigin,
+      ...storageOrigins,
       // The basemap's sprite sheet and its shaded-relief tiles at low zoom.
       "https://tiles.openfreemap.org",
     ],
@@ -77,18 +108,18 @@ function contentSecurityPolicy(): string {
       "'self'",
       apiOrigin,
       /*
-       * The storage origin belongs here as well as in `img-src`, and for a
-       * different reason: a Host uploads a photo with an XHR straight to the
-       * presigned URL, and an XHR is governed by `connect-src`. Listed only
-       * under `img-src`, the browser blocks the upload before it leaves the
-       * page — and the only trace is a console line, because nothing ever
-       * reaches the network tab.
+       * Storage belongs here as well as in `img-src`, and for a different
+       * reason: a Host uploads a photo with an XHR straight to the presigned
+       * URL, and an XHR is governed by `connect-src`. Listed only under
+       * `img-src`, the browser blocks the upload before it leaves the page —
+       * and the only trace is a console line, because nothing ever reaches
+       * the network tab.
        *
        * Development hid this for a long time: `http://localhost:*` below
        * covers local MinIO, so the gap only appears once storage lives
        * somewhere else (milestone 13).
        */
-      storageOrigin,
+      ...storageOrigins,
       "https://api.stripe.com",
       "https://maps.stripe.com",
       // Map tiles and glyphs.

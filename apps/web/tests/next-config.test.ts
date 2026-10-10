@@ -52,6 +52,40 @@ describe("images.remotePatterns", () => {
     });
   });
 
+  /**
+   * A Spaces bucket answers to two hostnames and a photo uses both: the upload
+   * goes to the origin because that is what the presigner signs, the read goes
+   * to whichever `S3_PUBLIC_BASE_URL` names. Allow-list one and the other half
+   * breaks — and this cost a production debugging session, because the image
+   * optimiser's reply to an unlisted host is a bare 400.
+   */
+  it("allow-lists a Spaces bucket under both its origin and its CDN name", async () => {
+    for (const configured of [
+      "https://rezervio-bucket.fra1.digitaloceanspaces.com",
+      "https://rezervio-bucket.fra1.cdn.digitaloceanspaces.com",
+    ]) {
+      const config = await loadConfig({
+        S3_PUBLIC_BASE_URL: configured,
+        NODE_ENV: "production",
+      });
+
+      const hostnames = config.images?.remotePatterns?.map((pattern) => pattern.hostname);
+
+      expect(hostnames).toContain("rezervio-bucket.fra1.digitaloceanspaces.com");
+      expect(hostnames).toContain("rezervio-bucket.fra1.cdn.digitaloceanspaces.com");
+    }
+  });
+
+  it("invents no CDN sibling for a host that is not Spaces", async () => {
+    const config = await loadConfig({
+      S3_PUBLIC_BASE_URL: "http://localhost:9000/rezervio-local",
+      NODE_ENV: "development",
+    });
+
+    // Unsplash plus exactly one storage pattern.
+    expect(config.images?.remotePatterns).toHaveLength(2);
+  });
+
   it("keeps the seeded Unsplash catalogue working", async () => {
     const config = await loadConfig({ S3_PUBLIC_BASE_URL: undefined });
 
@@ -166,6 +200,24 @@ describe("security headers", () => {
     );
     expect(policy).toMatch(
       /connect-src[^;]*https:\/\/rezervio-bucket\.fra1\.digitaloceanspaces\.com/,
+    );
+  });
+
+  /**
+   * Configured with the CDN name, the policy still has to permit the upload,
+   * which can only go to the origin.
+   */
+  it("permits the upload origin even when reads are configured via the CDN", async () => {
+    const policy = await policyFor({
+      NODE_ENV: "production",
+      S3_PUBLIC_BASE_URL: "https://rezervio-bucket.fra1.cdn.digitaloceanspaces.com",
+    });
+
+    expect(policy).toMatch(
+      /connect-src[^;]*https:\/\/rezervio-bucket\.fra1\.digitaloceanspaces\.com/,
+    );
+    expect(policy).toMatch(
+      /img-src[^;]*https:\/\/rezervio-bucket\.fra1\.cdn\.digitaloceanspaces\.com/,
     );
   });
 
