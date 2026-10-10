@@ -145,6 +145,30 @@ describe("security headers", () => {
     expect(policy).toMatch(/img-src[^;]*https:\/\/tiles\.openfreemap\.org/);
   });
 
+  /**
+   * Object storage has to be in two directives, for two different reasons:
+   * `img-src` so a stored photo renders, and `connect-src` because a Host
+   * uploads one with an XHR straight to the presigned URL.
+   *
+   * Missing from `connect-src`, the upload is blocked before it leaves the
+   * page — no network request, no server log, just one line in the console.
+   * Development never showed it: `http://localhost:*` covers local MinIO, so
+   * the gap only opens once storage lives somewhere else.
+   */
+  it("lets the browser both load and upload Property photos", async () => {
+    const policy = await policyFor({
+      NODE_ENV: "production",
+      S3_PUBLIC_BASE_URL: "https://rezervio-bucket.fra1.digitaloceanspaces.com",
+    });
+
+    expect(policy).toMatch(
+      /img-src[^;]*https:\/\/rezervio-bucket\.fra1\.digitaloceanspaces\.com/,
+    );
+    expect(policy).toMatch(
+      /connect-src[^;]*https:\/\/rezervio-bucket\.fra1\.digitaloceanspaces\.com/,
+    );
+  });
+
   it("sends HSTS only in production", async () => {
     // Read back one environment at a time: `headers()` resolves the
     // environment when Next calls it, not when the module is imported.

@@ -76,6 +76,19 @@ function contentSecurityPolicy(): string {
     "connect-src": [
       "'self'",
       apiOrigin,
+      /*
+       * The storage origin belongs here as well as in `img-src`, and for a
+       * different reason: a Host uploads a photo with an XHR straight to the
+       * presigned URL, and an XHR is governed by `connect-src`. Listed only
+       * under `img-src`, the browser blocks the upload before it leaves the
+       * page — and the only trace is a console line, because nothing ever
+       * reaches the network tab.
+       *
+       * Development hid this for a long time: `http://localhost:*` below
+       * covers local MinIO, so the gap only appears once storage lives
+       * somewhere else (milestone 13).
+       */
+      storageOrigin,
       "https://api.stripe.com",
       "https://maps.stripe.com",
       // Map tiles and glyphs.
