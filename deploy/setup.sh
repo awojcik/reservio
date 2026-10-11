@@ -182,9 +182,16 @@ fi
 # file, so overwriting it takes HTTPS down. Keep a copy: a template that
 # silently discards a working TLS configuration is the worst kind of
 # idempotence.
+NGINX_BACKUP=""
+HAD_TLS=0
 if [ -f /etc/nginx/sites-available/rezervio ]; then
-  cp -a /etc/nginx/sites-available/rezervio \
-    "/etc/nginx/sites-available/rezervio.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+  NGINX_BACKUP="/etc/nginx/sites-available/rezervio.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+  cp -a /etc/nginx/sites-available/rezervio "$NGINX_BACKUP"
+  # Whether this host was serving HTTPS before we touched it. Everything below
+  # has to leave it at least as well off as it found it.
+  if grep -qE '^[[:space:]]*listen[[:space:]]+(\[::\]:)?443' /etc/nginx/sites-available/rezervio; then
+    HAD_TLS=1
+  fi
 fi
 
 sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
@@ -200,7 +207,29 @@ rm -f /etc/nginx/sites-enabled/default
 if [ "$DOMAIN" != "_" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
   log "Przywracam HTTPS z istniejącego certyfikatu"
   certbot install --cert-name "$DOMAIN" --nginx --non-interactive \
-    || warn "Nie udało się wstawić certyfikatu — dokończ przez: bash $HERE/tls.sh"
+    || warn "certbot install zakończył się błędem"
+fi
+
+# A host that was serving HTTPS and no longer is, is an outage — not a line in
+# a log somebody reads later. This has gone wrong twice: the template and
+# certbot share one file, so writing the template drops the `listen 443` block
+# and a `certbot install` that fails for any reason leaves the site on port 80
+# with no redirect. Loud, and reverted, beats quiet and broken.
+if [ "$HAD_TLS" = 1 ] \
+  && ! grep -qE '^[[:space:]]*listen[[:space:]]+(\[::\]:)?443' /etc/nginx/sites-available/rezervio; then
+  warn "HTTPS zniknął z konfiguracji, a przed uruchomieniem skryptu działał."
+  if [ -n "$NGINX_BACKUP" ]; then
+    warn "Przywracam poprzednią konfigurację: $NGINX_BACKUP"
+    cp -a "$NGINX_BACKUP" /etc/nginx/sites-available/rezervio
+    if nginx -t >/dev/null 2>&1; then
+      systemctl reload nginx
+      warn "HTTPS przywrócone, ale BEZ zmian z tego uruchomienia (np. cache zdjęć)."
+    else
+      warn "Przywrócona konfiguracja też nie przechodzi nginx -t — napraw ręcznie."
+    fi
+  fi
+  warn "Dokończ przez: certbot install --cert-name $DOMAIN --nginx"
+  exit 1
 fi
 
 nginx -t
