@@ -154,86 +154,14 @@ as_app systemctl --user daemon-reload
 as_app systemctl --user enable rezervio-stack.service rezervio-backup.timer
 
 # ------------------------------------------------------------------ nginx
-log "Nginx (domena: $DOMAIN, storage: $STORAGE)"
-
-# Zawsze, żeby include w nginx.conf zawsze się rozwiązywał — także wtedy, gdy
-# storage jest zewnętrzny i nie ma czego proxować. Ten sam skrypt generuje ten
-# fragment w CI, gdzie przechodzi przez `nginx -t`.
-install -d -m 755 /etc/nginx/snippets
-STORAGE="$STORAGE" STORAGE_BUCKET="$STORAGE_BUCKET" STORAGE_HOST_PORT="$STORAGE_HOST_PORT" \
-  bash "$HERE/nginx-storage-snippet.sh" > /etc/nginx/snippets/rezervio-storage.conf
-
-# The on-disk cache for optimised photos. It goes to conf.d because
-# `proxy_cache_path` and `map` are `http`-context directives and the site file
-# below is a `server` block — and the site file references the zone, so
-# without this `nginx -t` fails outright rather than quietly skipping it.
-# nginx creates the cache's own directory but not its parent, and Debian ships
-# no /var/cache/nginx — a missing parent is an `[emerg]` at reload, not a
-# warning.
-install -d -o www-data -g www-data -m 755 /var/cache/nginx
-install -m 644 "$HERE/nginx-image-cache.conf" /etc/nginx/conf.d/rezervio-image-cache.conf
-
-if [ "$DOMAIN" = "_" ]; then
-  SERVER_NAME="_"
-else
-  SERVER_NAME="$DOMAIN www.$DOMAIN"
-fi
-# Certbot writes its `listen 443` block and the HTTP redirect into this very
-# file, so overwriting it takes HTTPS down. Keep a copy: a template that
-# silently discards a working TLS configuration is the worst kind of
-# idempotence.
-NGINX_BACKUP=""
-HAD_TLS=0
-if [ -f /etc/nginx/sites-available/rezervio ]; then
-  NGINX_BACKUP="/etc/nginx/sites-available/rezervio.bak.$(date -u +%Y%m%dT%H%M%SZ)"
-  cp -a /etc/nginx/sites-available/rezervio "$NGINX_BACKUP"
-  # Whether this host was serving HTTPS before we touched it. Everything below
-  # has to leave it at least as well off as it found it.
-  if grep -qE '^[[:space:]]*listen[[:space:]]+(\[::\]:)?443' /etc/nginx/sites-available/rezervio; then
-    HAD_TLS=1
-  fi
-fi
-
-sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
-    -e "s|__WEB_PORT__|$WEB_HOST_PORT|g" \
-    -e "s|__API_PORT__|$API_HOST_PORT|g" \
-  "$HERE/nginx.conf" > /etc/nginx/sites-available/rezervio
-ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
-rm -f /etc/nginx/sites-enabled/default
-
-# The block certbot owns has just been overwritten along with the rest, so it
-# goes back in before nginx is asked to reload. `certbot install` only edits
-# the server config — no ACME request, no rate limit, no e-mail prompt.
-if [ "$DOMAIN" != "_" ] && [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-  log "Przywracam HTTPS z istniejącego certyfikatu"
-  certbot install --cert-name "$DOMAIN" --nginx --non-interactive \
-    || warn "certbot install zakończył się błędem"
-fi
-
-# A host that was serving HTTPS and no longer is, is an outage — not a line in
-# a log somebody reads later. This has gone wrong twice: the template and
-# certbot share one file, so writing the template drops the `listen 443` block
-# and a `certbot install` that fails for any reason leaves the site on port 80
-# with no redirect. Loud, and reverted, beats quiet and broken.
-if [ "$HAD_TLS" = 1 ] \
-  && ! grep -qE '^[[:space:]]*listen[[:space:]]+(\[::\]:)?443' /etc/nginx/sites-available/rezervio; then
-  warn "HTTPS zniknął z konfiguracji, a przed uruchomieniem skryptu działał."
-  if [ -n "$NGINX_BACKUP" ]; then
-    warn "Przywracam poprzednią konfigurację: $NGINX_BACKUP"
-    cp -a "$NGINX_BACKUP" /etc/nginx/sites-available/rezervio
-    if nginx -t >/dev/null 2>&1; then
-      systemctl reload nginx
-      warn "HTTPS przywrócone, ale BEZ zmian z tego uruchomienia (np. cache zdjęć)."
-    else
-      warn "Przywrócona konfiguracja też nie przechodzi nginx -t — napraw ręcznie."
-    fi
-  fi
-  warn "Dokończ przez: certbot install --cert-name $DOMAIN --nginx"
-  exit 1
-fi
-
-nginx -t
-systemctl reload nginx
+# Delegowane, żeby ta sama logika obsługiwała zmianę samego nginx bez
+# bootstrapu całego hosta — patrz nginx-update.sh. Pod `set -e` jego kod
+# wyjścia 1 (utracone HTTPS) przerywa też ten skrypt, co jest zamierzone.
+DOMAIN="$DOMAIN" \
+  WEB_HOST_PORT="$WEB_HOST_PORT" API_HOST_PORT="$API_HOST_PORT" \
+  STORAGE="$STORAGE" STORAGE_BUCKET="$STORAGE_BUCKET" \
+  STORAGE_HOST_PORT="$STORAGE_HOST_PORT" \
+  bash "$HERE/nginx-update.sh"
 
 # ------------------------------------------------------------------ firewall
 log "Firewall"

@@ -409,7 +409,23 @@ rclone copy :s3:stary… :s3:nowy…      # przenieś pliki
 ## Nginx i TLS
 
 Konfiguracja: [`deploy/nginx.conf`](deploy/nginx.conf), instalowana przez
-`setup.sh` z podstawieniem `__SERVER_NAME__`, `__WEB_PORT__`, `__API_PORT__`.
+[`deploy/nginx-update.sh`](deploy/nginx-update.sh) z podstawieniem
+`__SERVER_NAME__`, `__WEB_PORT__`, `__API_PORT__`. `setup.sh` woła ten sam
+skrypt, więc logika istnieje w jednym egzemplarzu.
+
+**Zmieniasz tylko nginx — uruchom `nginx-update.sh`, nie `setup.sh`.**
+`setup.sh` to bootstrap całego hosta: zakłada użytkownika, instaluje pakiety,
+konfiguruje podmana i systemd. Uruchamianie go po to, żeby podmienić blok
+`location`, jest nieproporcjonalne i raz już zdjęło HTTPS.
+
+```bash
+scp -r deploy root@DROPLET:/tmp/rezervio-deploy
+ssh root@DROPLET 'DOMAIN=rezervio.pl STORAGE=external bash /tmp/rezervio-deploy/nginx-update.sh'
+curl -sI https://rezervio.pl/ | head -3        # zawsze sprawdź po zmianie
+```
+
+Skrypt kończy kodem 1 i cofa zmianę, jeśli host serwował HTTPS, a po zmianie
+już nie serwuje — wtedy w logu jest polecenie do dokończenia ręcznie.
 
 `location /api/` przekazuje URI bez zmian (`proxy_pass` bez ukośnika na końcu),
 bo API ma globalny prefiks `/api` i przepisanie ścieżki poróżniłoby aplikację
@@ -828,6 +844,8 @@ i Redisa zostaje na domyślnych — bez pomiarów strojenie jest zgadywaniem.
 | `deploy/compose.prod.yml` | web · api · worker · postgres · redis |
 | `deploy/compose.storage.yml` | opcjonalne MinIO; sama obecność pliku włącza |
 | `deploy/nginx.conf` | reverse proxy, `/` → web, `/api/` → api |
+| `deploy/nginx-update.sh` | aktualizacja samego nginxa, bez bootstrapu hosta |
+| `deploy/nginx-image-cache.conf` | strefa cache dla `/_next/image` (kontekst `http`) |
 | `deploy/nginx-storage-snippet.sh` | fragment nginxa dla MinIO; CI sprawdza oba warianty |
 | `deploy/tls.sh` | Let's Encrypt dla domeny i www |
 | `deploy/env.production.example` | wzór `/opt/rezervio/.env.production` |
