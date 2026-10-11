@@ -9,10 +9,13 @@ import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import { useToast } from "@/components/ui/Toast";
 import { apiClient } from "@/lib/api";
 import { clientErrorMessage } from "@/lib/api-message";
-import { uploadHeaders } from "@/lib/upload";
+import {
+  ACCEPTED_UPLOAD_TYPES,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_LABEL,
+  uploadHeaders,
+} from "@/lib/upload";
 
-const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGES = 30;
 
 type Upload = { id: string; name: string; progress: number };
@@ -47,12 +50,12 @@ export function ImageManager({
       }
 
       for (const file of files.slice(0, room)) {
-        if (!ACCEPTED.includes(file.type)) {
+        if (!ACCEPTED_UPLOAD_TYPES.includes(file.type)) {
           showToast(`${file.name}: dozwolone są JPEG, PNG i WebP.`);
           continue;
         }
-        if (file.size > MAX_BYTES) {
-          showToast(`${file.name}: maksymalny rozmiar to 10 MB.`);
+        if (file.size > MAX_UPLOAD_BYTES) {
+          showToast(`${file.name}: maksymalny rozmiar to ${MAX_UPLOAD_LABEL}.`);
           continue;
         }
 
@@ -140,7 +143,7 @@ export function ImageManager({
         <Upload size={22} strokeWidth={2.2} className="text-muted" />
         <p className="mt-2 text-[15px] font-bold">Przeciągnij zdjęcia tutaj</p>
         <p className="mt-1 text-[13px] text-muted">
-          JPEG, PNG lub WebP · do 10 MB · maksymalnie {MAX_IMAGES} zdjęć
+          JPEG, PNG lub WebP · do {MAX_UPLOAD_LABEL} · maksymalnie {MAX_IMAGES} zdjęć
         </p>
         <button
           type="button"
@@ -152,7 +155,7 @@ export function ImageManager({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED.join(",")}
+          accept={ACCEPTED_UPLOAD_TYPES.join(",")}
           multiple
           className="sr-only"
           onChange={(event) => {

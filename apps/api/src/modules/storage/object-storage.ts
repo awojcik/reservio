@@ -21,7 +21,7 @@ export type PresignedUploadRequest = {
  * would upload.
  *
  * `head` is the first few bytes, which is all it takes to tell an image from
- * anything else, and deliberately not the whole object: a 10 MB photo read
+ * anything else, and deliberately not the whole object: a whole photo read
  * into the API to check twelve bytes would be the one thing this upload design
  * exists to avoid.
  */

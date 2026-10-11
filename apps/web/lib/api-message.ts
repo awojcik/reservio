@@ -6,7 +6,7 @@ import { ApiError } from "@rezervio/api-client";
  * `ApiError.message` is about the request ("Żądanie do API nie powiodło
  * się (400)"), not about what went wrong; the sentence a Host can act on is in
  * the body Nest sends. Without this, a validation error the API states
- * precisely — the file is not an image, the photo is over 10 MB — reaches the
+ * precisely — the file is not an image, the photo is over the size limit — reaches the
  * screen as a generic failure, and the Host has no way to tell a rejected
  * file from a broken upload.
  *

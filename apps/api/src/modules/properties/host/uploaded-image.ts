@@ -1,13 +1,13 @@
 import { BadRequestException } from "@nestjs/common";
 
 import type { StoredObjectHead } from "../../storage/object-storage";
-import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES } from "./dto/host-image.dto";
+import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGE_LABEL } from "./dto/host-image.dto";
 
 /**
  * Checking that an uploaded photo is a photo.
  *
  * A Host's browser PUTs the file straight to object storage with a presigned
- * URL, which is what keeps 10 MB uploads out of the API — but it also means
+ * URL, which is what keeps whole photos out of the API — but it also means
  * `contentType` and `sizeBytes` on the upload-url request are claims, checked
  * as claims and never compared with anything. Nothing in the system looked at
  * the bytes. A client could declare `image/jpeg`, upload an executable, and
@@ -62,12 +62,12 @@ export function assertUploadedImage(object: StoredObjectHead | null): ImageForma
   }
 
   /*
-   * The declared size was already rejected above 10 MB when the URL was
+   * The declared size was already rejected above the limit when the URL was
    * issued. This is the same limit against the real size, which is the only
    * one that matters: the presigned PUT does not enforce what was declared.
    */
   if (object.sizeBytes > MAX_IMAGE_BYTES) {
-    throw new BadRequestException("Maksymalny rozmiar zdjęcia to 10 MB.");
+    throw new BadRequestException(`Maksymalny rozmiar zdjęcia to ${MAX_IMAGE_LABEL}.`);
   }
 
   const format = detectImageFormat(object.head);

@@ -9,12 +9,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ConfirmImageDto = exports.UploadUrlDto = exports.CreateUploadUrlDto = exports.MAX_IMAGES_PER_PROPERTY = exports.MAX_IMAGE_BYTES = exports.ALLOWED_IMAGE_TYPES = void 0;
+exports.ConfirmImageDto = exports.UploadUrlDto = exports.CreateUploadUrlDto = exports.MAX_IMAGES_PER_PROPERTY = exports.MAX_IMAGE_LABEL = exports.MAX_IMAGE_BYTES = exports.ALLOWED_IMAGE_TYPES = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 exports.ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-exports.MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+exports.MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+exports.MAX_IMAGE_LABEL = `${exports.MAX_IMAGE_BYTES / (1024 * 1024)} MB`;
 exports.MAX_IMAGES_PER_PROPERTY = 30;
 class CreateUploadUrlDto {
     fileName;
@@ -41,7 +42,7 @@ __decorate([
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
-    (0, class_validator_1.Max)(exports.MAX_IMAGE_BYTES, { message: "Maksymalny rozmiar zdjęcia to 10 MB" }),
+    (0, class_validator_1.Max)(exports.MAX_IMAGE_BYTES, { message: `Maksymalny rozmiar zdjęcia to ${exports.MAX_IMAGE_LABEL}` }),
     __metadata("design:type", Number)
 ], CreateUploadUrlDto.prototype, "sizeBytes", void 0);
 class UploadUrlDto {

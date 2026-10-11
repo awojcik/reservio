@@ -2,11 +2,12 @@ import { ApiError } from "@rezervio/api-client";
 import { describe, expect, it } from "vitest";
 
 import { clientErrorMessage } from "@/lib/api-message";
+import { MAX_UPLOAD_LABEL } from "@/lib/upload";
 
 /**
  * What a Host is told when the API refuses a photo.
  *
- * The API states the reason precisely — not an image, over 10 MB — and the
+ * The API states the reason precisely — not an image, over the size limit — and the
  * uploader used to replace all of it with "Nie udało się wgrać X", which reads
  * like a network problem and invites re-trying a file that can never work.
  */
@@ -22,10 +23,13 @@ describe("clientErrorMessage", () => {
 
   it("joins the several sentences class-validator sends", () => {
     const error = new ApiError("…", 400, {
-      message: ["Maksymalny rozmiar zdjęcia to 10 MB.", "Dozwolone formaty to JPEG, PNG i WebP"],
+      message: [
+        `Maksymalny rozmiar zdjęcia to ${MAX_UPLOAD_LABEL}.`,
+        "Dozwolone formaty to JPEG, PNG i WebP",
+      ],
     });
 
-    expect(clientErrorMessage(error)).toMatch(/10 MB.*JPEG/);
+    expect(clientErrorMessage(error)).toMatch(new RegExp(`${MAX_UPLOAD_LABEL}.*JPEG`));
   });
 
   /**

@@ -3,7 +3,16 @@ import { Transform, Type } from "class-transformer";
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * The limit as a person reads it, derived rather than written out.
+ *
+ * It appeared in five sentences before this existed, and changing the number
+ * meant finding all five — a message still promising 10 MB while the check
+ * refuses 6 is worse than no message.
+ */
+export const MAX_IMAGE_LABEL = `${MAX_IMAGE_BYTES / (1024 * 1024)} MB`;
 export const MAX_IMAGES_PER_PROPERTY = 30;
 
 export class CreateUploadUrlDto {
@@ -23,7 +32,7 @@ export class CreateUploadUrlDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(MAX_IMAGE_BYTES, { message: "Maksymalny rozmiar zdjęcia to 10 MB" })
+  @Max(MAX_IMAGE_BYTES, { message: `Maksymalny rozmiar zdjęcia to ${MAX_IMAGE_LABEL}` })
   sizeBytes!: number;
 }
 

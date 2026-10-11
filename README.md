@@ -575,7 +575,7 @@ Lokalnie storage to MinIO uruchamiane przez `pnpm infra:start`. Bucket i polityk
 publicznego odczytu tworzą się same przy starcie API — nic nie trzeba klikać
 w konsoli.
 
-Limity (walidowane po stronie serwera): JPEG/PNG/WebP, 10 MB na zdjęcie,
+Limity (walidowane po stronie serwera): JPEG/PNG/WebP, 5 MB na zdjęcie,
 30 zdjęć na obiekt. `position = 0` to zdjęcie główne.
 
 Produkcyjnie ten sam kod działa na DigitalOcean Spaces — wystarczy zmienić

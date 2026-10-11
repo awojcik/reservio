@@ -5,7 +5,10 @@ import {
   assertUploadedImage,
   detectImageFormat,
 } from "../src/modules/properties/host/uploaded-image";
-import { MAX_IMAGE_BYTES } from "../src/modules/properties/host/dto/host-image.dto";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_IMAGE_LABEL,
+} from "../src/modules/properties/host/dto/host-image.dto";
 
 /** A real 1×1 PNG, so the signature is not hand-assembled from the same table. */
 const PNG = new Uint8Array(
@@ -76,7 +79,9 @@ describe("assertUploadedImage", () => {
    * so this is the first time the real size is known.
    */
   it("refuses an object larger than the limit, whatever was declared", () => {
-    expect(() => assertUploadedImage(stored(PNG, MAX_IMAGE_BYTES + 1))).toThrow(/10 MB/);
+    // Against the shared label, so a changed limit cannot leave the sentence
+    // promising the old one.
+    expect(() => assertUploadedImage(stored(PNG, MAX_IMAGE_BYTES + 1))).toThrow(MAX_IMAGE_LABEL);
     expect(() => assertUploadedImage(stored(PNG, MAX_IMAGE_BYTES))).not.toThrow();
   });
 
@@ -92,6 +97,6 @@ describe("assertUploadedImage", () => {
    */
   it("reports size before format", () => {
     const bigAndWrong = stored(new Uint8Array([0x00, 0x01]), MAX_IMAGE_BYTES * 2);
-    expect(() => assertUploadedImage(bigAndWrong)).toThrow(/10 MB/);
+    expect(() => assertUploadedImage(bigAndWrong)).toThrow(MAX_IMAGE_LABEL);
   });
 });

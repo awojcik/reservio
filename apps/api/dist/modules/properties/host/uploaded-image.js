@@ -34,7 +34,7 @@ function assertUploadedImage(object) {
         throw new common_1.BadRequestException("Wgrany plik jest pusty.");
     }
     if (object.sizeBytes > host_image_dto_1.MAX_IMAGE_BYTES) {
-        throw new common_1.BadRequestException("Maksymalny rozmiar zdjęcia to 10 MB.");
+        throw new common_1.BadRequestException(`Maksymalny rozmiar zdjęcia to ${host_image_dto_1.MAX_IMAGE_LABEL}.`);
     }
     const format = detectImageFormat(object.head);
     if (format === null) {

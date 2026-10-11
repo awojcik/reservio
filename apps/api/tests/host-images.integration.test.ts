@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { Database } from "../src/infrastructure/database/connection";
+import { MAX_IMAGE_BYTES } from "../src/modules/properties/host/dto/host-image.dto";
 import { propertyImages } from "../src/infrastructure/database/schema";
 import {
   DATABASE,
@@ -95,7 +96,7 @@ describe("property images", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it("rejects an image larger than 10 MB", async () => {
+  it("rejects an image larger than the size limit", async () => {
     const propertyId = await createDraft(hostA);
 
     const response = await app.inject({
@@ -105,7 +106,7 @@ describe("property images", () => {
       payload: {
         fileName: "wielkie.jpg",
         contentType: "image/jpeg",
-        sizeBytes: 11 * 1024 * 1024,
+        sizeBytes: MAX_IMAGE_BYTES + 1,
       },
     });
 
