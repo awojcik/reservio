@@ -423,6 +423,40 @@ bash /tmp/rezervio-deploy/tls.sh            # certyfikat, jeśli DNS nie był go
 certbot renew --dry-run                     # odnowienia pilnuje timer certbota
 ```
 
+### Cache zoptymalizowanych zdjęć
+
+`location /_next/image` trzyma na dysku to, co wypluje optymalizator Next, w
+strefie zdefiniowanej w [`deploy/nginx-image-cache.conf`](deploy/nginx-image-cache.conf)
+(instalowanej do `/etc/nginx/conf.d/`, bo `proxy_cache_path` i `map` należą do
+kontekstu `http`, a plik serwisu to blok `server`).
+
+Powód jest arytmetyczny: ten droplet ma jeden vCPU, a przekodowanie zdjęcia
+600 KB do 1200 px kosztuje go ~1,5 s pracy sharpa. Cache Next siedzi wewnątrz
+kontenera, więc każdy deploy — a kontenery odtwarzamy przy każdym deployu —
+wyrzuca go i następny gość płaci tę cenę za każde zdjęcie na stronie. Tutaj
+przeżywa kontener, a nginx oddaje trafienie, nie budząc Next.
+
+Klucz cache'u uwzględnia wariant formatu (AVIF / WebP / pozostałe), bo Next
+wybiera format po nagłówku `Accept` i zgłasza to przez `Vary: Accept`.
+Cache'owanie po surowym nagłówku rozdrobniłoby cache per wersja przeglądarki.
+
+```bash
+# HIT, MISS albo UPDATING — pierwsze, co sprawdzić, gdy zdjęcia mielą
+curl -sI 'https://rezervio.pl/_next/image?url=…&w=1200&q=75' | grep -i x-rezervio-image-cache
+
+du -sh /var/cache/nginx/rezervio-images     # limit to 1 GB, czyści się sam
+```
+
+Dwie pułapki, obie już kosztowały jeden nieudany reload:
+
+- **`/var/cache/nginx` musi istnieć.** Nginx tworzy ostatni segment ścieżki i
+  nic więcej, a Debian tego katalogu nie ma. `setup.sh` go zakłada; bez niego
+  `nginx -t` pada na `mkdir() … failed`.
+- **Obraz `web` musi mieć własny katalog cache zapisywalny.** `COPY` w
+  Containerfile pisze jako root, proces chodzi jako `node` — bez `--chown`
+  Next nie ma gdzie zapisać `.next/cache/images`, zapis pada po cichu i
+  `X-Nextjs-Cache` zostaje `MISS` na zawsze.
+
 ### Uwaga: certbot i szablon dzielą jeden plik
 
 Certbot wpisuje swój blok `listen 443` i przekierowanie z HTTP do

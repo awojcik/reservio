@@ -163,6 +163,16 @@ install -d -m 755 /etc/nginx/snippets
 STORAGE="$STORAGE" STORAGE_BUCKET="$STORAGE_BUCKET" STORAGE_HOST_PORT="$STORAGE_HOST_PORT" \
   bash "$HERE/nginx-storage-snippet.sh" > /etc/nginx/snippets/rezervio-storage.conf
 
+# The on-disk cache for optimised photos. It goes to conf.d because
+# `proxy_cache_path` and `map` are `http`-context directives and the site file
+# below is a `server` block — and the site file references the zone, so
+# without this `nginx -t` fails outright rather than quietly skipping it.
+# nginx creates the cache's own directory but not its parent, and Debian ships
+# no /var/cache/nginx — a missing parent is an `[emerg]` at reload, not a
+# warning.
+install -d -o www-data -g www-data -m 755 /var/cache/nginx
+install -m 644 "$HERE/nginx-image-cache.conf" /etc/nginx/conf.d/rezervio-image-cache.conf
+
 if [ "$DOMAIN" = "_" ]; then
   SERVER_NAME="_"
 else

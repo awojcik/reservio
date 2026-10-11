@@ -167,6 +167,13 @@ jobs:
           sudo ln -sf /etc/nginx/sites-available/rezervio /etc/nginx/sites-enabled/rezervio
           sudo rm -f /etc/nginx/sites-enabled/default
           sudo install -d -m 755 /etc/nginx/snippets
+          # The site references the proxy_cache zone this defines, so a missing
+          # copy is an `[emerg] zone "rezervio_images" is unknown`, not a
+          # silent omission. Its parent directory is nginx's to fill but not
+          # to create, and Debian ships no /var/cache/nginx.
+          sudo install -d -o www-data -g www-data -m 755 /var/cache/nginx
+          sudo install -m 644 deploy/nginx-image-cache.conf \
+            /etc/nginx/conf.d/rezervio-image-cache.conf
 
           # Both storage variants, from the same script setup.sh runs on the
           # droplet. The MinIO one generates a whole location block — a

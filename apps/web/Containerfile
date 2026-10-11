@@ -63,7 +63,18 @@ WORKDIR /app
 
 # Self-contained: the traced node_modules come inside the standalone bundle,
 # so there is no install step and nothing to prune.
-COPY --from=build /repo/apps/web/.next/standalone ./
+#
+# `--chown` is not cosmetic. COPY writes as root, the server runs as `node`,
+# and the image optimiser caches what it produces in `.next/cache/images` —
+# inside this tree. Owned by root, that write fails silently and every photo
+# is re-downloaded and re-encoded on *every* request: measured on the droplet,
+# 1.5s of sharp on one vCPU per 1200px image, for ever, with
+# `X-Nextjs-Cache: MISS` the only sign. The cache directory is created here
+# rather than left to the server, so its ownership cannot depend on which
+# process happens to touch it first.
+COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
+RUN mkdir -p apps/web/.next/cache/images \
+  && chown -R node:node apps/web/.next/cache
 
 USER node
 
