@@ -22,6 +22,7 @@ const schema_1 = require("../../../infrastructure/database/schema");
 const object_storage_1 = require("../../storage/object-storage");
 const host_image_dto_1 = require("./dto/host-image.dto");
 const host_properties_service_1 = require("./host-properties.service");
+const uploaded_image_1 = require("./uploaded-image");
 const EXTENSIONS = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -59,6 +60,9 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
             .from(schema_1.propertyImages)
             .where((0, drizzle_orm_1.eq)(schema_1.propertyImages.objectKey, dto.objectKey))
             .limit(1);
+        if (existing.length === 0) {
+            await this.assertUploadIsAnImage(propertyId, dto.objectKey);
+        }
         if (existing.length === 0) {
             const rows = await this.database.db
                 .select({ position: schema_1.propertyImages.position })
@@ -151,6 +155,39 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
         }
         this.logger.log({ event: "property.image.deleted", propertyId, imageId });
         return this.hostProperties.loadImages(propertyId);
+    }
+    async assertUploadIsAnImage(propertyId, objectKey) {
+        const object = await this.storage.inspectObject(objectKey);
+        try {
+            const format = (0, uploaded_image_1.assertUploadedImage)(object);
+            this.logger.log({
+                event: "property.image.verified",
+                propertyId,
+                objectKey,
+                format,
+                sizeBytes: object?.sizeBytes,
+            });
+        }
+        catch (error) {
+            if (object !== null) {
+                await this.storage.deleteObject(objectKey).catch((reason) => {
+                    this.logger.warn({
+                        event: "property.image.rejected_cleanup_failed",
+                        propertyId,
+                        objectKey,
+                        reason: reason.message,
+                    });
+                });
+            }
+            this.logger.warn({
+                event: "property.image.rejected",
+                propertyId,
+                objectKey,
+                reason: error.message,
+                sizeBytes: object?.sizeBytes,
+            });
+            throw error;
+        }
     }
     assertKeyBelongsToProperty(propertyId, objectKey) {
         const pattern = new RegExp(`^properties/${propertyId}/[0-9a-f-]{36}\\.(jpg|png|webp)$`, "i");

@@ -16,6 +16,7 @@ const config_1 = require("@nestjs/config");
 const client_s3_1 = require("@aws-sdk/client-s3");
 const s3_request_presigner_1 = require("@aws-sdk/s3-request-presigner");
 const UPLOAD_URL_TTL_SECONDS = 600;
+const HEAD_BYTES = 12;
 let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
     logger = new common_1.Logger(S3ObjectStorage_1.name);
     client;
@@ -89,6 +90,27 @@ let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
             expiresInSeconds: UPLOAD_URL_TTL_SECONDS,
         };
     }
+    async inspectObject(objectKey) {
+        try {
+            const [metadata, ranged] = await Promise.all([
+                this.client.send(new client_s3_1.HeadObjectCommand({ Bucket: this.bucket, Key: objectKey })),
+                this.client.send(new client_s3_1.GetObjectCommand({
+                    Bucket: this.bucket,
+                    Key: objectKey,
+                    Range: `bytes=0-${HEAD_BYTES - 1}`,
+                })),
+            ]);
+            return {
+                sizeBytes: metadata.ContentLength ?? 0,
+                head: (await ranged.Body?.transformToByteArray()) ?? new Uint8Array(),
+            };
+        }
+        catch (error) {
+            if (isNotFound(error))
+                return null;
+            throw error;
+        }
+    }
     async deleteObject(objectKey) {
         await this.client.send(new client_s3_1.DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }));
     }
@@ -101,4 +123,10 @@ exports.S3ObjectStorage = S3ObjectStorage = S3ObjectStorage_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [config_1.ConfigService])
 ], S3ObjectStorage);
+function isNotFound(error) {
+    const named = error;
+    return (named?.name === "NotFound" ||
+        named?.name === "NoSuchKey" ||
+        named?.$metadata?.httpStatusCode === 404);
+}
 //# sourceMappingURL=s3-object-storage.js.map

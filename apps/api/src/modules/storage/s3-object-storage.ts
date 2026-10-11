@@ -3,7 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import {
   CreateBucketCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutBucketPolicyCommand,
   PutObjectCommand,
   S3Client,
@@ -14,9 +16,16 @@ import type {
   ObjectStorage,
   PresignedUpload,
   PresignedUploadRequest,
+  StoredObjectHead,
 } from "./object-storage";
 
 const UPLOAD_URL_TTL_SECONDS = 600;
+
+/**
+ * Enough to identify every format we accept. WebP needs all twelve: `RIFF`,
+ * four bytes of length, then `WEBP`.
+ */
+const HEAD_BYTES = 12;
 
 @Injectable()
 export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
@@ -155,6 +164,35 @@ export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
     };
   }
 
+  /**
+   * Two calls rather than one. A ranged GET does report the total size in
+   * `Content-Range`, but parsing a header to learn something `HeadObject`
+   * states outright trades clarity for a round trip on a path that runs once
+   * per uploaded photo — not a hot one.
+   */
+  async inspectObject(objectKey: string): Promise<StoredObjectHead | null> {
+    try {
+      const [metadata, ranged] = await Promise.all([
+        this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey })),
+        this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: objectKey,
+            Range: `bytes=0-${HEAD_BYTES - 1}`,
+          }),
+        ),
+      ]);
+
+      return {
+        sizeBytes: metadata.ContentLength ?? 0,
+        head: (await ranged.Body?.transformToByteArray()) ?? new Uint8Array(),
+      };
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
   async deleteObject(objectKey: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
@@ -164,4 +202,19 @@ export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
   getPublicUrl(objectKey: string): string {
     return `${this.publicBaseUrl}/${objectKey}`;
   }
+}
+
+/**
+ * A key that was never uploaded is an ordinary outcome here, not a failure of
+ * the storage: the Host's browser may have abandoned the PUT, or the key may
+ * be invented. Providers disagree on how they say so — `NotFound` from
+ * HeadObject, `NoSuchKey` from GetObject — so both, plus the status, count.
+ */
+function isNotFound(error: unknown): boolean {
+  const named = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return (
+    named?.name === "NotFound" ||
+    named?.name === "NoSuchKey" ||
+    named?.$metadata?.httpStatusCode === 404
+  );
 }

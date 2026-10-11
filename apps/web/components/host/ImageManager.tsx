@@ -3,11 +3,12 @@
 import { GripVertical, Star, Trash2, Upload } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
-import { ApiError, type HostPropertyImage } from "@rezervio/api-client";
+import { type HostPropertyImage } from "@rezervio/api-client";
 
 import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import { useToast } from "@/components/ui/Toast";
 import { apiClient } from "@/lib/api";
+import { clientErrorMessage } from "@/lib/api-message";
 import { uploadHeaders } from "@/lib/upload";
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp"];
@@ -77,11 +78,11 @@ export function ImageManager({
           });
           onChange(next);
         } catch (error) {
-          showToast(
-            error instanceof ApiError && error.status === 409
-              ? `Obiekt może mieć maksymalnie ${MAX_IMAGES} zdjęć.`
-              : `Nie udało się wgrać ${file.name}.`,
-          );
+          // The API rejects a file that is not an image, or one over the size
+          // limit, with a sentence saying so — worth more than the generic
+          // failure, which leaves a Host re-trying a file that will never
+          // work.
+          showToast(clientErrorMessage(error) ?? `Nie udało się wgrać ${file.name}.`);
         } finally {
           setUploads((current) => current.filter((item) => item.id !== uploadId));
         }

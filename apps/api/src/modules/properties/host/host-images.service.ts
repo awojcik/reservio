@@ -22,6 +22,7 @@ import {
 } from "./dto/host-image.dto";
 import type { HostPropertyImageDto } from "./dto/host-property.dto";
 import { HostPropertiesService } from "./host-properties.service";
+import { assertUploadedImage } from "./uploaded-image";
 
 const EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -83,6 +84,13 @@ export class HostImagesService {
       .from(propertyImages)
       .where(eq(propertyImages.objectKey, dto.objectKey))
       .limit(1);
+
+    // Only on the way in. A re-confirmation of a row that already exists has
+    // nothing left to check, and its object may since have been replaced by
+    // the variant pipeline or anything else that owns it afterwards.
+    if (existing.length === 0) {
+      await this.assertUploadIsAnImage(propertyId, dto.objectKey);
+    }
 
     // Confirming the same upload twice must not create a duplicate row.
     if (existing.length === 0) {
@@ -216,6 +224,52 @@ export class HostImagesService {
 
     this.logger.log({ event: "property.image.deleted", propertyId, imageId });
     return this.hostProperties.loadImages(propertyId);
+  }
+
+  /**
+   * The bytes are checked here and nowhere earlier, because here is the first
+   * place they exist: the Host's browser uploads straight to storage, so the
+   * API sees a key, not a file.
+   *
+   * A rejected object is deleted. Leaving it costs money, and it is addressable
+   * at a public URL — an unreferenced file nobody can find is still a file
+   * anyone with the key can fetch.
+   */
+  private async assertUploadIsAnImage(propertyId: string, objectKey: string): Promise<void> {
+    const object = await this.storage.inspectObject(objectKey);
+
+    try {
+      const format = assertUploadedImage(object);
+      this.logger.log({
+        event: "property.image.verified",
+        propertyId,
+        objectKey,
+        format,
+        sizeBytes: object?.sizeBytes,
+      });
+    } catch (error) {
+      if (object !== null) {
+        // Never at the expense of the real error: a bucket that refuses the
+        // delete must not turn "not an image" into "storage unavailable".
+        await this.storage.deleteObject(objectKey).catch((reason: unknown) => {
+          this.logger.warn({
+            event: "property.image.rejected_cleanup_failed",
+            propertyId,
+            objectKey,
+            reason: (reason as Error).message,
+          });
+        });
+      }
+
+      this.logger.warn({
+        event: "property.image.rejected",
+        propertyId,
+        objectKey,
+        reason: (error as Error).message,
+        sizeBytes: object?.sizeBytes,
+      });
+      throw error;
+    }
   }
 
   private assertKeyBelongsToProperty(propertyId: string, objectKey: string): void {
