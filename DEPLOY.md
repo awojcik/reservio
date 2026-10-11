@@ -85,6 +85,11 @@ zmienne repozytorium `NEXT_PUBLIC_API_URL`, `S3_PUBLIC_BASE_URL`,
 Raz, jako root, na świeżym droplecie.
 
 ```bash
+# `rm -rf` nie jest ostrożnościowe, jest konieczne: gdy katalog docelowy już
+# istnieje, `scp -r deploy …/rezervio-deploy` wkłada do niego *katalog*
+# `deploy`, a nie jego zawartość, i skrypty lądują o poziom głębiej —
+# `bash /tmp/rezervio-deploy/setup.sh: No such file or directory`.
+ssh root@<droplet> 'rm -rf /tmp/rezervio-deploy'
 scp -r deploy root@<droplet>:/tmp/rezervio-deploy
 ssh root@<droplet> 'EMAIL=ty@example.com bash /tmp/rezervio-deploy/setup.sh'
 ```
@@ -419,6 +424,9 @@ konfiguruje podmana i systemd. Uruchamianie go po to, żeby podmienić blok
 `location`, jest nieproporcjonalne i raz już zdjęło HTTPS.
 
 ```bash
+# Patrz uwaga przy pierwszej konfiguracji: bez `rm -rf` powtórne `scp -r`
+# zagnieździ katalog i skrypt nie będzie widoczny pod tą ścieżką.
+ssh root@DROPLET 'rm -rf /tmp/rezervio-deploy'
 scp -r deploy root@DROPLET:/tmp/rezervio-deploy
 ssh root@DROPLET 'DOMAIN=rezervio.pl STORAGE=external bash /tmp/rezervio-deploy/nginx-update.sh'
 curl -sI https://rezervio.pl/ | head -3        # zawsze sprawdź po zmianie
