@@ -351,9 +351,29 @@ osiągalny dokładnie pod tym adresem, pod którym URL został podpisany.
 
 ### A. DigitalOcean Spaces — zalecany
 
-Bucket public-read w `fra1`, klucz Spaces, pięć zmiennych w `.env.production`
-i tyle. Zdjęcia nie leżą na droplecie, więc nie zajmują jego dysku, nie giną
-razem z nim i nie wymagają własnego backupu.
+Bucket w `fra1`, klucz Spaces i zmienne `S3_*` w `.env.production`
+(wzór w `env.production.example`). Zdjęcia nie leżą na droplecie, więc nie
+zajmują jego dysku, nie giną razem z nim i nie wymagają własnego backupu.
+
+Trzy rzeczy, które trzeba wiedzieć — każda z nich raz zatrzymała zdjęcia na
+produkcji:
+
+```text
+CORS bucketa       AllowedOrigin  https://rezervio.pl
+                   AllowedMethods PUT, GET
+                   AllowedHeaders content-type, x-amz-acl
+                   bez tego przeglądarka nie wyśle pliku (preflight odrzucony)
+
+polityka bucketa   NIE — Spaces odpowiada Forbidden na PutBucketPolicy.
+                   Publiczny odczyt daje ACL public-read na każdym obiekcie,
+                   podpisany jako nagłówek x-amz-acl (API i front robią to same).
+
+dwa hosty          upload idzie na origin  <bucket>.fra1.digitaloceanspaces.com
+                   odczyt może iść przez   <bucket>.fra1.cdn.digitaloceanspaces.com
+                   next.config.ts wyprowadza oba z S3_PUBLIC_BASE_URL
+                   (CSP img-src/connect-src i images.remotePatterns),
+                   więc S3_PUBLIC_BASE_URL może być którymkolwiek z nich.
+```
 
 ### B. MinIO na droplecie
 
@@ -807,6 +827,18 @@ podman exec rezervio-redis redis-cli info keyspace
 #  → S3_PUBLIC_BASE_URL musi być identyczny w .env.production i w build-argu
 #    obrazu web; to on wchodzi do CSP img-src i do images.remotePatterns.
 podman exec rezervio-api printenv S3_PUBLIC_BASE_URL
+#  objaw                                   przyczyna
+#  konsola: CSP blokuje connect-src        host bucketa nie wszedł do build-argu web
+#  konsola: CORS przy PUT                  brak reguły CORS na buckecie (§Storage A)
+#  /_next/image → 400                      host spoza images.remotePatterns
+#  /_next/image → 403, obiekt → 403        obiekt bez public-read: wgrany przed
+#                                          f017e2f albo bez nagłówka x-amz-acl
+#  „Plik nie jest obrazem…" / „Maksymalny  walidacja przy potwierdzeniu — tak ma
+#   rozmiar zdjęcia to 5 MB"               być (docs/architecture.md)
+#  zdjęcia wolne, cache zawsze MISS        katalog cache nginx albo .next/cache
+#                                          bez zapisu — §Cache zoptymalizowanych zdjęć
+curl -sI "https://rezervio.pl/_next/image?url=<zakodowany-url>&w=640&q=75" \
+  | grep -i -E '^HTTP|x-rezervio-image-cache'
 
 # Miejsce na dysku
 df -h / && podman system df && du -sh /opt/rezervio/backups

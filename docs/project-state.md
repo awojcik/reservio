@@ -26,7 +26,7 @@ Ostatni ukończony milestone: **13 — Production Deployment**.
 | Katalog i wyszukiwarka | PostgreSQL jako baza i backend wyszukiwania; PostGIS, pg_trgm, pgvector |
 | Lokalizacja i mapy | Adres → geokoder (Nominatim) → `Property.latitude/longitude`; przeciągany znacznik, jedno źródło prawdy dla wszystkich map |
 | Konta | Wspólna tożsamość `User`; `Host` to opcjonalny profil, nie osobne konto |
-| Obiekty | Edytor, zdjęcia w object storage, publikacja jako komenda domenowa |
+| Obiekty | Edytor, zdjęcia w object storage (walidacja typu po magic bytes i rozmiaru ≤ 5 MB przy potwierdzeniu), publikacja jako komenda domenowa |
 | Dostępność | `daterange` półotwarty, advisory lock per Property, import/eksport iCal |
 | Rezerwacje | `BookingHold` z TTL, idempotency w PostgreSQL, ochrona przed double bookingiem |
 | Powiadomienia | Transakcyjny outbox → BullMQ → SMTP, dedup po `dedup_key` |
@@ -39,7 +39,7 @@ Ostatni ukończony milestone: **13 — Production Deployment**.
 | Observability | `requestId` w każdym logu i odpowiedzi, redakcja sekretów, rozdzielone `/health` i `/ready`, taksonomia kodów błędów |
 | Hardening | Walidacja env przy starcie, guard na klucz live, cookies, ochrona Origin, rate limiting, nagłówki bezpieczeństwa, ochrona przed brute-force |
 | Connectivity | Połączenia, mapowanie obiektów, rezerwacje w obie strony, webhook + polling, rekoncyliacja; adapter Hostaway (PMS) i kanał Channex (Rezervio jako OTA) |
-| Wdrożenie | GitHub Actions → obrazy OCI w GHCR (tag = git SHA) → ręczny deploy po SSH → Podman Compose: web, api, worker, postgres, redis za nginxem. Worker to ten sam obraz co API, inna komenda. Runbook: [DEPLOY.md](../DEPLOY.md) |
+| Wdrożenie | GitHub Actions → obrazy OCI w GHCR (tag = git SHA) → ręczny deploy po SSH → Podman Compose: web, api, worker, postgres, redis za nginxem. Worker to ten sam obraz co API, inna komenda. Działa na https://rezervio.pl; zdjęcia na DigitalOcean Spaces, nginx cache dla `/_next/image`. Runbook: [DEPLOY.md](../DEPLOY.md) |
 
 ## Czego celowo nie ma
 
@@ -195,11 +195,27 @@ Czego repozytorium **nie** jest w stanie samo zapewnić — wymaga konta albo
 dostępu:
 
 ```text
-DigitalOcean Spaces (zdjęcia)      bez tego API nie wstanie: S3_* są wymagane
+DigitalOcean Spaces (zdjęcia)      skonfigurowane; bez S3_* API nie wstanie
 bucket na backupy poza dropletem   bez tego backup.sh kończy się błędem
 konto SMTP                         bez tego powiadomienia lądują jako FAILED
 sekrety GitHuba (PROD_HOST, …)     bez tego workflow deploya się nie uruchomi
 alerty i uptime check              klikane w panelu, nie w repozytorium
+```
+
+### Produkcja — otwarte punkty operacyjne
+
+Produkcja działa (upload, wyświetlanie i cache zdjęć zweryfikowane na żywo),
+ale **nie jest jeszcze ogłoszona jako gotowa**. Zostało:
+
+```text
+rotacja klucza Spaces              panel DO + .env.production, potem
+                                   recreate api i worker
+test restartu dropleta             reboot → curl https://rezervio.pl/api/ready
+backup poza dropletem              dziś BACKUP_ALLOW_LOCAL_ONLY=true; bucket
+                                   BACKUP_S3_* + próba odtworzenia
+alerty i uptime check              panel DigitalOcean
+sprzątanie starego wdrożenia       rezervio.service i /root/reservio
+Stripe na produkcji                wyłącznie tryb testowy
 ```
 
 ## Następny milestone

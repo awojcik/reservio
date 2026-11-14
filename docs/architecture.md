@@ -185,9 +185,43 @@ Klucz obiektu nadaje serwer (`properties/{propertyId}/{uuid}.{ext}`), więc
 potwierdzony upload nie może trafić pod cudze `Property`. Oryginalna nazwa pliku
 nigdy nie jest kluczem.
 
-Abstrakcja `ObjectStorage` ma trzy metody — `createPresignedUpload`,
-`deleteObject`, `getPublicUrl` — dzięki czemu MinIO lokalnie i DigitalOcean
-Spaces produkcyjnie są dla domeny tym samym.
+Abstrakcja `ObjectStorage` ma cztery metody — `createPresignedUpload`,
+`inspectObject`, `deleteObject`, `getPublicUrl` — dzięki czemu MinIO lokalnie
+i DigitalOcean Spaces produkcyjnie są dla domeny tym samym.
+
+Zdjęcie jest publiczne dzięki **ACL na obiekcie** (`public-read`), nie dzięki
+polityce bucketa — Spaces odmawia `PutBucketPolicy`. ACL jedzie w podpisanym
+**nagłówku** `x-amz-acl`, nie w query stringu: Spaces ignoruje ACL z query, a
+upload i tak się udaje, zostawiając prywatny obiekt
+(`apps/api/src/modules/storage/s3-object-storage.ts`, po stronie przeglądarki
+`uploadHeaders()` w `apps/web/lib/upload.ts`).
+
+### Walidacja wgranego pliku
+
+`contentType` i `sizeBytes` przy prośbie o upload URL to deklaracje klienta —
+presigned PUT ich nie egzekwuje. Pierwszym momentem, w którym bajty istnieją,
+jest potwierdzenie (`POST .../images`), i tam API sprawdza, co faktycznie
+wylądowało pod kluczem (`assertUploadedImage` w
+`apps/api/src/modules/properties/host/uploaded-image.ts`):
+
+```text
+inspectObject(key)  → HEAD + pierwsze 12 bajtów, nigdy cały plik
+brak obiektu        → 400 „Nie znaleziono wgranego pliku…"
+0 bajtów            → 400 „Wgrany plik jest pusty."
+> 5 MB              → 400 „Maksymalny rozmiar zdjęcia to 5 MB."
+magic bytes         → JPEG FF D8 FF · PNG 8 bajtów sygnatury · WebP RIFF????WEBP
+                      inne → 400 „Plik nie jest obrazem JPEG, PNG ani WebP."
+```
+
+- Sprawdzamy tylko przy **pierwszym** potwierdzeniu; ponowne potwierdzenie
+  istniejącego wiersza nie ma już czego weryfikować.
+- Wykryty format **celowo** nie jest porównywany z zadeklarowanym — PNG
+  zapisany jako `.jpg` to wciąż prawdziwe zdjęcie.
+- Odrzucony obiekt jest kasowany; nieudane sprzątanie jest logowane
+  (`property.image.rejected_cleanup_failed`) i nie zmienia odpowiedzi.
+- Limit żyje w jednym miejscu na stronę: `MAX_IMAGE_BYTES` w
+  `dto/host-image.dto.ts` (API) i `MAX_UPLOAD_BYTES` w `apps/web/lib/upload.ts`
+  (front, żeby nie marnować uploadu). Muszą być równe.
 
 Transakcja bazodanowa **nigdy** nie obejmuje wywołania sieciowego do storage.
 Przy usuwaniu zdjęcia najpierw commitujemy zmianę w bazie, a dopiero potem
