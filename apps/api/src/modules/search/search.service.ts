@@ -6,6 +6,7 @@ import { overlapCondition } from "../availability/availability.service";
 import { DATABASE } from "../../infrastructure/database/database.module";
 import type { Database } from "../../infrastructure/database/connection";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/object-storage";
+import { imageSources } from "../properties/images/image-sources";
 import type { PropertySummaryDto, SearchResponseDto } from "../properties/dto/property.dto";
 import type { SearchQueryDto, SortOption } from "./dto/search-query.dto";
 
@@ -34,6 +35,7 @@ type SearchRow = {
   amenities: string[] | null;
   cover_object_key: string | null;
   cover_url: string | null;
+  cover_variants_version: number | null;
   cover_alt: string | null;
   total_count: string | number;
 };
@@ -158,11 +160,12 @@ export class SearchService {
         )                                                                                AS amenities,
         cover.object_key                                                                 AS cover_object_key,
         cover.url                                                                        AS cover_url,
+        cover.variants_version                                                           AS cover_variants_version,
         cover.alt_text                                                                   AS cover_alt,
         count(*) OVER ()                                                                 AS total_count
       FROM properties p
       LEFT JOIN LATERAL (
-        SELECT object_key, url, alt_text FROM property_images
+        SELECT object_key, url, variants_version, alt_text FROM property_images
         WHERE property_id = p.id ORDER BY position ASC LIMIT 1
       ) cover ON TRUE
       WHERE ${where}
@@ -246,10 +249,12 @@ export class SearchService {
 
   /** object_key is the storage identity; the seeded catalogue keeps plain URLs. */
   private toCoverImage(row: SearchRow) {
-    const url = row.cover_object_key
-      ? this.storage.getPublicUrl(row.cover_object_key)
-      : row.cover_url;
-    return url ? { url, altText: row.cover_alt, position: 0 } : null;
+    const sources = imageSources(this.storage, {
+      objectKey: row.cover_object_key,
+      url: row.cover_url,
+      variantsVersion: row.cover_variants_version,
+    });
+    return sources.url ? { ...sources, altText: row.cover_alt, position: 0 } : null;
   }
 
   private toSummary(row: SearchRow, nights: number): PropertySummaryDto {

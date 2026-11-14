@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SearchResponseDto = exports.PropertyDetailDto = exports.PropertySummaryDto = exports.PropertyImageDto = exports.PriceQuoteDto = void 0;
+exports.SearchResponseDto = exports.PropertyDetailDto = exports.PropertySummaryDto = exports.PropertyImageDto = exports.ImageVariantsDto = exports.PriceQuoteDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class PriceQuoteDto {
     nights;
@@ -59,16 +59,48 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: "PLN", description: "Waluta ISO-4217" }),
     __metadata("design:type", String)
 ], PriceQuoteDto.prototype, "currency", void 0);
+class ImageVariantsDto {
+    thumb;
+    card;
+    detail;
+    hero;
+}
+exports.ImageVariantsDto = ImageVariantsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: "max. 240 px szerokości" }),
+    __metadata("design:type", String)
+], ImageVariantsDto.prototype, "thumb", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: "max. 640 px szerokości" }),
+    __metadata("design:type", String)
+], ImageVariantsDto.prototype, "card", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: "max. 1200 px szerokości" }),
+    __metadata("design:type", String)
+], ImageVariantsDto.prototype, "detail", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: "max. 1600 px szerokości" }),
+    __metadata("design:type", String)
+], ImageVariantsDto.prototype, "hero", void 0);
 class PropertyImageDto {
     url;
+    variants;
     altText;
     position;
 }
 exports.PropertyImageDto = PropertyImageDto;
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: "Oryginał; zawsze dostępny" }),
     __metadata("design:type", String)
 ], PropertyImageDto.prototype, "url", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        type: ImageVariantsDto,
+        nullable: true,
+        description: "null, dopóki warianty nie zostały wygenerowane — wtedy używaj url",
+    }),
+    __metadata("design:type", Object)
+], PropertyImageDto.prototype, "variants", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: String, nullable: true }),
     __metadata("design:type", Object)

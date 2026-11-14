@@ -6,6 +6,7 @@ import {
   PROPERTY_TYPES,
 } from "../../../../infrastructure/database/schema";
 import { PUBLISH_REQUIREMENTS } from "../../../../domain/publish-readiness";
+import { ImageVariantsDto } from "../../dto/property.dto";
 
 /**
  * The Host-facing contract. Separate from the public Listing DTO on purpose:
@@ -19,6 +20,13 @@ export class HostPropertyImageDto {
 
   @ApiProperty({ example: "http://localhost:9000/rezervio-local/properties/…/a.jpg" })
   url!: string;
+
+  @ApiProperty({
+    type: ImageVariantsDto,
+    nullable: true,
+    description: "null zaraz po wgraniu, dopóki worker nie wygeneruje wariantów",
+  })
+  variants!: ImageVariantsDto | null;
 
   @ApiProperty({ type: String, nullable: true })
   altText!: string | null;

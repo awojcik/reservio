@@ -14,6 +14,7 @@ import { DATABASE } from "../../../infrastructure/database/database.module";
 import type { Database } from "../../../infrastructure/database/connection";
 import { propertyImages } from "../../../infrastructure/database/schema";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/object-storage";
+import { ImageVariantsService } from "../images/image-variants.service";
 import {
   MAX_IMAGES_PER_PROPERTY,
   type ConfirmImageDto,
@@ -42,6 +43,7 @@ export class HostImagesService {
     @Inject(DATABASE) private readonly database: Database,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
     private readonly hostProperties: HostPropertiesService,
+    private readonly variants: ImageVariantsService,
   ) {}
 
   /**
@@ -102,14 +104,18 @@ export class HostImagesService {
 
       const nextPosition = rows.length ? rows[rows.length - 1].position + 1 : 0;
 
-      await this.database.db.insert(propertyImages).values({
-        propertyId,
-        objectKey: dto.objectKey,
-        altText: dto.altText ?? null,
-        position: nextPosition,
-      });
+      const [added] = await this.database.db
+        .insert(propertyImages)
+        .values({
+          propertyId,
+          objectKey: dto.objectKey,
+          altText: dto.altText ?? null,
+          position: nextPosition,
+        })
+        .returning({ id: propertyImages.id });
 
       this.logger.log({ event: "property.image.added", propertyId, objectKey: dto.objectKey });
+      await this.requestVariants(propertyId, added.id);
     }
 
     return this.hostProperties.loadImages(propertyId);
@@ -210,6 +216,7 @@ export class HostImagesService {
     });
 
     if (image.objectKey) {
+      await this.variants.removeVariants(image.objectKey, propertyId);
       try {
         await this.storage.deleteObject(image.objectKey);
       } catch (error) {
@@ -269,6 +276,25 @@ export class HostImagesService {
         sizeBytes: object?.sizeBytes,
       });
       throw error;
+    }
+  }
+
+  /**
+   * After the row exists, never instead of it: the photo is already usable
+   * from its original, and variants only make it faster. A queue that is down
+   * must not turn a successful upload into an error — the backfill picks up
+   * whatever was missed.
+   */
+  private async requestVariants(propertyId: string, imageId: string): Promise<void> {
+    try {
+      await this.variants.enqueue(imageId);
+    } catch (error) {
+      this.logger.warn({
+        event: "property.image.variants_enqueue_failed",
+        propertyId,
+        imageId,
+        reason: (error as Error).message,
+      });
     }
   }
 

@@ -20,6 +20,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const database_module_1 = require("../../../infrastructure/database/database.module");
 const schema_1 = require("../../../infrastructure/database/schema");
 const object_storage_1 = require("../../storage/object-storage");
+const image_variants_service_1 = require("../images/image-variants.service");
 const host_image_dto_1 = require("./dto/host-image.dto");
 const host_properties_service_1 = require("./host-properties.service");
 const uploaded_image_1 = require("./uploaded-image");
@@ -33,11 +34,13 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
     database;
     storage;
     hostProperties;
+    variants;
     logger = new common_1.Logger(HostImagesService_1.name);
-    constructor(database, storage, hostProperties) {
+    constructor(database, storage, hostProperties, variants) {
         this.database = database;
         this.storage = storage;
         this.hostProperties = hostProperties;
+        this.variants = variants;
     }
     async createUploadUrl(hostId, propertyId, dto) {
         await this.hostProperties.findOwned(hostId, propertyId);
@@ -70,13 +73,17 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
                 .where((0, drizzle_orm_1.eq)(schema_1.propertyImages.propertyId, propertyId))
                 .orderBy((0, drizzle_orm_1.asc)(schema_1.propertyImages.position));
             const nextPosition = rows.length ? rows[rows.length - 1].position + 1 : 0;
-            await this.database.db.insert(schema_1.propertyImages).values({
+            const [added] = await this.database.db
+                .insert(schema_1.propertyImages)
+                .values({
                 propertyId,
                 objectKey: dto.objectKey,
                 altText: dto.altText ?? null,
                 position: nextPosition,
-            });
+            })
+                .returning({ id: schema_1.propertyImages.id });
             this.logger.log({ event: "property.image.added", propertyId, objectKey: dto.objectKey });
+            await this.requestVariants(propertyId, added.id);
         }
         return this.hostProperties.loadImages(propertyId);
     }
@@ -141,6 +148,7 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
             }
         });
         if (image.objectKey) {
+            await this.variants.removeVariants(image.objectKey, propertyId);
             try {
                 await this.storage.deleteObject(image.objectKey);
             }
@@ -189,6 +197,19 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
             throw error;
         }
     }
+    async requestVariants(propertyId, imageId) {
+        try {
+            await this.variants.enqueue(imageId);
+        }
+        catch (error) {
+            this.logger.warn({
+                event: "property.image.variants_enqueue_failed",
+                propertyId,
+                imageId,
+                reason: error.message,
+            });
+        }
+    }
     assertKeyBelongsToProperty(propertyId, objectKey) {
         const pattern = new RegExp(`^properties/${propertyId}/[0-9a-f-]{36}\\.(jpg|png|webp)$`, "i");
         if (!pattern.test(objectKey)) {
@@ -210,6 +231,7 @@ exports.HostImagesService = HostImagesService = HostImagesService_1 = __decorate
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(database_module_1.DATABASE)),
     __param(1, (0, common_1.Inject)(object_storage_1.OBJECT_STORAGE)),
-    __metadata("design:paramtypes", [Object, Object, host_properties_service_1.HostPropertiesService])
+    __metadata("design:paramtypes", [Object, Object, host_properties_service_1.HostPropertiesService,
+        image_variants_service_1.ImageVariantsService])
 ], HostImagesService);
 //# sourceMappingURL=host-images.service.js.map

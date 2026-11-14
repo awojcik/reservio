@@ -13,9 +13,11 @@ exports.PropertyNotReadyDto = exports.PublishErrorDto = exports.HostPropertyDeta
 const swagger_1 = require("@nestjs/swagger");
 const schema_1 = require("../../../../infrastructure/database/schema");
 const publish_readiness_1 = require("../../../../domain/publish-readiness");
+const property_dto_1 = require("../../dto/property.dto");
 class HostPropertyImageDto {
     id;
     url;
+    variants;
     altText;
     position;
 }
@@ -28,6 +30,14 @@ __decorate([
     (0, swagger_1.ApiProperty)({ example: "http://localhost:9000/rezervio-local/properties/…/a.jpg" }),
     __metadata("design:type", String)
 ], HostPropertyImageDto.prototype, "url", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        type: property_dto_1.ImageVariantsDto,
+        nullable: true,
+        description: "null zaraz po wgraniu, dopóki worker nie wygeneruje wariantów",
+    }),
+    __metadata("design:type", Object)
+], HostPropertyImageDto.prototype, "variants", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ type: String, nullable: true }),
     __metadata("design:type", Object)

@@ -17,6 +17,7 @@ export const PAYMENT_CANCEL_QUEUE = "payment-provider-cancel";
 export const STAY_LIFECYCLE_QUEUE = "stay-lifecycle";
 export const SETTLEMENT_QUEUE_NAME = "host-settlement";
 export const EXTERNAL_SYNC_QUEUE_NAME = "external-sync";
+export const IMAGE_VARIANTS_QUEUE_NAME = "property-image-variants";
 
 /**
  * Redis key namespace. Tests set their own so a running dev server — which
@@ -54,6 +55,7 @@ export const CANCEL_QUEUE = Symbol("CANCEL_QUEUE");
 export const STAY_QUEUE = Symbol("STAY_QUEUE");
 export const SETTLEMENT_QUEUE = Symbol("SETTLEMENT_QUEUE");
 export const EXTERNAL_QUEUE = Symbol("EXTERNAL_QUEUE");
+export const IMAGE_VARIANTS_QUEUE = Symbol("IMAGE_VARIANTS_QUEUE");
 
 export type CalendarSyncJob = {
   externalCalendarId: string;
@@ -131,6 +133,14 @@ export type ExternalSyncJob = {
   eventId?: string;
 };
 
+/**
+ * Generating the WebP variants of one uploaded photo. The id only; the worker
+ * reloads the row, which says whether there is anything left to do.
+ */
+export type ImageVariantsJob = {
+  imageId: string;
+};
+
 @Injectable()
 class QueueLifecycle implements OnApplicationShutdown {
   constructor(
@@ -144,6 +154,7 @@ class QueueLifecycle implements OnApplicationShutdown {
     @Inject(STAY_QUEUE) private readonly stayQueue: Queue<StayLifecycleJob>,
     @Inject(SETTLEMENT_QUEUE) private readonly settlementQueue: Queue<SettlementJob>,
     @Inject(EXTERNAL_QUEUE) private readonly externalQueue: Queue<ExternalSyncJob>,
+    @Inject(IMAGE_VARIANTS_QUEUE) private readonly imageVariantsQueue: Queue<ImageVariantsJob>,
   ) {}
 
   /** Without this the process keeps an open socket and never exits. */
@@ -157,6 +168,7 @@ class QueueLifecycle implements OnApplicationShutdown {
     await this.stayQueue.close();
     await this.settlementQueue.close();
     await this.externalQueue.close();
+    await this.imageVariantsQueue.close();
     this.redis.disconnect();
   }
 }
@@ -323,6 +335,23 @@ class QueueLifecycle implements OnApplicationShutdown {
           },
         }),
     },
+    {
+      provide: IMAGE_VARIANTS_QUEUE,
+      inject: [REDIS_CONNECTION, ConfigService],
+      useFactory: (connection: Redis, config: ConfigService): Queue<ImageVariantsJob> =>
+        new Queue<ImageVariantsJob>(IMAGE_VARIANTS_QUEUE_NAME, {
+          connection,
+          prefix: queuePrefix(config),
+          defaultJobOptions: {
+            // A storage hiccup is worth a retry; a photo that will not decode
+            // fails the same way every time and is shown from the original.
+            attempts: 3,
+            backoff: { type: "exponential", delay: 30_000 },
+            removeOnComplete: { count: 200 },
+            removeOnFail: { count: 500 },
+          },
+        }),
+    },
     QueueLifecycle,
   ],
   exports: [
@@ -336,6 +365,7 @@ class QueueLifecycle implements OnApplicationShutdown {
     STAY_QUEUE,
     SETTLEMENT_QUEUE,
     EXTERNAL_QUEUE,
+    IMAGE_VARIANTS_QUEUE,
   ],
 })
 export class QueueModule {}

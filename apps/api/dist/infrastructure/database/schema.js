@@ -118,6 +118,9 @@ exports.propertyImages = (0, pg_core_1.pgTable)("property_images", {
     url: (0, pg_core_1.text)("url"),
     altText: (0, pg_core_1.text)("alt_text"),
     position: (0, pg_core_1.integer)("position").notNull(),
+    variantsVersion: (0, pg_core_1.integer)("variants_version"),
+    width: (0, pg_core_1.integer)("width"),
+    height: (0, pg_core_1.integer)("height"),
     createdAt: (0, pg_core_1.timestamp)("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
     (0, pg_core_1.uniqueIndex)("property_images_property_position_key").on(table.propertyId, table.position),

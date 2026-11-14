@@ -4,6 +4,7 @@ import type { Queue } from "bullmq";
 import {
   CANCEL_QUEUE,
   HOLD_QUEUE,
+  IMAGE_VARIANTS_QUEUE,
   LIFECYCLE_QUEUE,
   NOTIFICATIONS_QUEUE,
   REFUND_QUEUE,
@@ -52,6 +53,7 @@ export const JOB_REGISTRY: { queue: string; token: symbol; jobs: string[] }[] = 
       "financial-reconciliation",
     ],
   },
+  { queue: "property-image-variants", token: IMAGE_VARIANTS_QUEUE, jobs: ["generate"] },
 ];
 
 /** How many failed jobs to pull per queue. Enough to see a pattern, not a dump. */
@@ -79,6 +81,7 @@ export class AdminJobsService {
     @Inject(CANCEL_QUEUE) cancel: Queue,
     @Inject(STAY_QUEUE) stay: Queue,
     @Inject(SETTLEMENT_QUEUE) settlement: Queue,
+    @Inject(IMAGE_VARIANTS_QUEUE) imageVariants: Queue,
   ) {
     const byToken = new Map<symbol, Queue>([
       [SYNC_QUEUE, sync],
@@ -89,6 +92,7 @@ export class AdminJobsService {
       [CANCEL_QUEUE, cancel],
       [STAY_QUEUE, stay],
       [SETTLEMENT_QUEUE, settlement],
+      [IMAGE_VARIANTS_QUEUE, imageVariants],
     ]);
 
     this.queues = JOB_REGISTRY.map((entry) => ({

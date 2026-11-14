@@ -13,6 +13,7 @@ import {
   propertyStayInformation,
 } from "../../infrastructure/database/schema";
 import { OBJECT_STORAGE, type ObjectStorage } from "../storage/object-storage";
+import { imageSources } from "./images/image-sources";
 import type { PropertyDetailDto } from "./dto/property.dto";
 
 const UUID_PATTERN =
@@ -56,6 +57,7 @@ export class PropertiesService {
       .select({
         objectKey: propertyImages.objectKey,
         url: propertyImages.url,
+        variantsVersion: propertyImages.variantsVersion,
         altText: propertyImages.altText,
         position: propertyImages.position,
       })
@@ -64,7 +66,7 @@ export class PropertiesService {
       .orderBy(asc(propertyImages.position));
 
     const images = imageRows.map((image) => ({
-      url: this.resolveImageUrl(image),
+      ...imageSources(this.storage, image),
       altText: image.altText,
       position: image.position,
     }));
@@ -166,11 +168,6 @@ export class PropertiesService {
       throw new NotFoundException(`Nie znaleziono Property: ${slugOrId}`);
     }
     return property;
-  }
-
-  /** object_key is the storage identity; the seeded catalogue keeps plain URLs. */
-  private resolveImageUrl(image: { objectKey: string | null; url: string | null }): string {
-    return image.objectKey ? this.storage.getPublicUrl(image.objectKey) : (image.url ?? "");
   }
 
   /** Without a Stay the page still shows a price; one night is the neutral default. */

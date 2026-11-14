@@ -1072,6 +1072,7 @@ describe("dashboard and job visibility", () => {
         "payment-refund",
         "stay-lifecycle",
         "host-settlement",
+        "property-image-variants",
       ]),
     );
     expect(response.json().queues.every((queue: { reachable: boolean }) => queue.reachable)).toBe(

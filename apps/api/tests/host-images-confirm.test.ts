@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HostImagesService } from "../src/modules/properties/host/host-images.service";
 import type { Database } from "../src/infrastructure/database/connection";
 import type { HostPropertiesService } from "../src/modules/properties/host/host-properties.service";
+import type { ImageVariantsService } from "../src/modules/properties/images/image-variants.service";
 import type { ObjectStorage, StoredObjectHead } from "../src/modules/storage/object-storage";
 
 /**
@@ -21,6 +22,7 @@ import type { ObjectStorage, StoredObjectHead } from "../src/modules/storage/obj
 
 const PROPERTY_ID = "11111111-1111-4111-8111-111111111111";
 const OBJECT_KEY = `properties/${PROPERTY_ID}/22222222-2222-4222-8222-222222222222.jpg`;
+const IMAGE_ID = "33333333-3333-4333-8333-333333333333";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 
@@ -50,8 +52,9 @@ function serviceWith(object: StoredObjectHead | null) {
     db: {
       select: () => emptyQuery(),
       insert: () => ({
-        values: async (row: unknown) => {
+        values: (row: unknown) => {
           inserted.push(row);
+          return { returning: async () => [{ id: IMAGE_ID }] };
         },
       }),
     },
@@ -62,8 +65,13 @@ function serviceWith(object: StoredObjectHead | null) {
     loadImages: vi.fn(async () => []),
   } as unknown as HostPropertiesService;
 
-  const service = new HostImagesService(database, storage, hostProperties);
-  return { service, storage, inserted };
+  const variants = {
+    enqueue: vi.fn(async () => undefined),
+    removeVariants: vi.fn(async () => undefined),
+  } as unknown as ImageVariantsService & { enqueue: ReturnType<typeof vi.fn> };
+
+  const service = new HostImagesService(database, storage, hostProperties, variants);
+  return { service, storage, inserted, variants };
 }
 
 describe("confirm, against the bytes that were uploaded", () => {
@@ -77,14 +85,34 @@ describe("confirm, against the bytes that were uploaded", () => {
     expect(storage.deleteObject).not.toHaveBeenCalled();
   });
 
+  it("asks for the photo's variants once the row exists", async () => {
+    const { service, variants } = serviceWith({ head: JPEG, sizeBytes: 2048 });
+
+    await service.confirm("host", PROPERTY_ID, { objectKey: OBJECT_KEY });
+
+    expect(variants.enqueue).toHaveBeenCalledWith(IMAGE_ID);
+  });
+
+  /** The photo already works from its original; variants only make it faster. */
+  it("keeps the upload when the queue is down", async () => {
+    const { service, variants, inserted } = serviceWith({ head: JPEG, sizeBytes: 2048 });
+    variants.enqueue.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(
+      service.confirm("host", PROPERTY_ID, { objectKey: OBJECT_KEY }),
+    ).resolves.toBeDefined();
+    expect(inserted).toHaveLength(1);
+  });
+
   it("refuses a file that is not an image, and writes no row", async () => {
     const notAnImage = new Uint8Array(Buffer.from("MZ\u0090\u0000"));
-    const { service, inserted } = serviceWith({ head: notAnImage, sizeBytes: 4096 });
+    const { service, inserted, variants } = serviceWith({ head: notAnImage, sizeBytes: 4096 });
 
     await expect(service.confirm("host", PROPERTY_ID, { objectKey: OBJECT_KEY })).rejects.toThrow(
       BadRequestException,
     );
     expect(inserted).toHaveLength(0);
+    expect(variants.enqueue).not.toHaveBeenCalled();
   });
 
   /**

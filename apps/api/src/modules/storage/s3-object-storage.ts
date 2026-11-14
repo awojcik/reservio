@@ -16,6 +16,7 @@ import type {
   ObjectStorage,
   PresignedUpload,
   PresignedUploadRequest,
+  ServerUpload,
   StoredObjectHead,
 } from "./object-storage";
 
@@ -191,6 +192,36 @@ export class S3ObjectStorage implements ObjectStorage, OnModuleInit {
       if (isNotFound(error)) return null;
       throw error;
     }
+  }
+
+  async getObject(objectKey: string): Promise<Buffer | null> {
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      );
+      const bytes = await response.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * A plain signed PUT from the server, so the ACL is an ordinary header here
+   * and none of the presigning caveats above apply.
+   */
+  async putObject(upload: ServerUpload): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: upload.objectKey,
+        Body: upload.body,
+        ContentType: upload.contentType,
+        CacheControl: upload.cacheControl,
+        ACL: "public-read",
+      }),
+    );
   }
 
   async deleteObject(objectKey: string): Promise<void> {

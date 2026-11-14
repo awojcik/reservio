@@ -89,6 +89,7 @@ services:
       DISABLE_STAY_WORKER: "true"
       DISABLE_SETTLEMENT_WORKER: "true"
       DISABLE_EXTERNAL_WORKER: "true"
+      DISABLE_IMAGE_WORKER: "true"
       # A bounded heap fails as a GC pause and a clear error instead of the
       # kernel OOM-killing whichever process happened to be largest.
       NODE_OPTIONS: --max-old-space-size=${API_HEAP_MB:-384}

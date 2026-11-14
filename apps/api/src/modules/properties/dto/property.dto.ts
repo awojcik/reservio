@@ -39,9 +39,34 @@ export class PriceQuoteDto {
   currency!: string;
 }
 
+/**
+ * Ready-made WebP files on the CDN, one per width. The client picks among
+ * them by the width it needs; nothing here goes through an image optimiser.
+ */
+export class ImageVariantsDto {
+  @ApiProperty({ description: "max. 240 px szerokości" })
+  thumb!: string;
+
+  @ApiProperty({ description: "max. 640 px szerokości" })
+  card!: string;
+
+  @ApiProperty({ description: "max. 1200 px szerokości" })
+  detail!: string;
+
+  @ApiProperty({ description: "max. 1600 px szerokości" })
+  hero!: string;
+}
+
 export class PropertyImageDto {
-  @ApiProperty()
+  @ApiProperty({ description: "Oryginał; zawsze dostępny" })
   url!: string;
+
+  @ApiProperty({
+    type: ImageVariantsDto,
+    nullable: true,
+    description: "null, dopóki warianty nie zostały wygenerowane — wtedy używaj url",
+  })
+  variants!: ImageVariantsDto | null;
 
   @ApiProperty({ type: String, nullable: true })
   altText!: string | null;

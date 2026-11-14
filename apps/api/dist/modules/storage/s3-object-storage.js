@@ -111,6 +111,28 @@ let S3ObjectStorage = S3ObjectStorage_1 = class S3ObjectStorage {
             throw error;
         }
     }
+    async getObject(objectKey) {
+        try {
+            const response = await this.client.send(new client_s3_1.GetObjectCommand({ Bucket: this.bucket, Key: objectKey }));
+            const bytes = await response.Body?.transformToByteArray();
+            return bytes ? Buffer.from(bytes) : null;
+        }
+        catch (error) {
+            if (isNotFound(error))
+                return null;
+            throw error;
+        }
+    }
+    async putObject(upload) {
+        await this.client.send(new client_s3_1.PutObjectCommand({
+            Bucket: this.bucket,
+            Key: upload.objectKey,
+            Body: upload.body,
+            ContentType: upload.contentType,
+            CacheControl: upload.cacheControl,
+            ACL: "public-read",
+        }));
+    }
     async deleteObject(objectKey) {
         await this.client.send(new client_s3_1.DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }));
     }

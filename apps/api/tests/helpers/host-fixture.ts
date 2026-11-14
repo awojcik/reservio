@@ -72,6 +72,8 @@ export async function createTestApp(
   process.env.DISABLE_SETTLEMENT_WORKER = "true";
   // Provider syncs and outbound pushes are driven explicitly by the tests.
   process.env.DISABLE_EXTERNAL_WORKER = "true";
+  // Photo variants are generated explicitly by the tests that care.
+  process.env.DISABLE_IMAGE_WORKER = "true";
   // No waiting for a real clock: the release policy is exercised by moving
   // `release_at`, not by sleeping (milestone 10 §3).
   process.env.HOST_SETTLEMENT_RELEASE_DELAY_HOURS ??= "24";

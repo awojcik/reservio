@@ -15,7 +15,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.QueueModule = exports.EXTERNAL_QUEUE = exports.SETTLEMENT_QUEUE = exports.STAY_QUEUE = exports.CANCEL_QUEUE = exports.REFUND_QUEUE = exports.NOTIFICATIONS_QUEUE = exports.LIFECYCLE_QUEUE = exports.HOLD_QUEUE = exports.SYNC_QUEUE = exports.REDIS_CONNECTION = exports.EXTERNAL_SYNC_QUEUE_NAME = exports.SETTLEMENT_QUEUE_NAME = exports.STAY_LIFECYCLE_QUEUE = exports.PAYMENT_CANCEL_QUEUE = exports.PAYMENT_REFUND_QUEUE = exports.NOTIFICATION_QUEUE = exports.BOOKING_LIFECYCLE_QUEUE = exports.BOOKING_HOLD_QUEUE = exports.CALENDAR_SYNC_QUEUE = void 0;
+exports.QueueModule = exports.IMAGE_VARIANTS_QUEUE = exports.EXTERNAL_QUEUE = exports.SETTLEMENT_QUEUE = exports.STAY_QUEUE = exports.CANCEL_QUEUE = exports.REFUND_QUEUE = exports.NOTIFICATIONS_QUEUE = exports.LIFECYCLE_QUEUE = exports.HOLD_QUEUE = exports.SYNC_QUEUE = exports.REDIS_CONNECTION = exports.IMAGE_VARIANTS_QUEUE_NAME = exports.EXTERNAL_SYNC_QUEUE_NAME = exports.SETTLEMENT_QUEUE_NAME = exports.STAY_LIFECYCLE_QUEUE = exports.PAYMENT_CANCEL_QUEUE = exports.PAYMENT_REFUND_QUEUE = exports.NOTIFICATION_QUEUE = exports.BOOKING_LIFECYCLE_QUEUE = exports.BOOKING_HOLD_QUEUE = exports.CALENDAR_SYNC_QUEUE = void 0;
 exports.queuePrefix = queuePrefix;
 exports.workerConcurrency = workerConcurrency;
 const common_1 = require("@nestjs/common");
@@ -31,6 +31,7 @@ exports.PAYMENT_CANCEL_QUEUE = "payment-provider-cancel";
 exports.STAY_LIFECYCLE_QUEUE = "stay-lifecycle";
 exports.SETTLEMENT_QUEUE_NAME = "host-settlement";
 exports.EXTERNAL_SYNC_QUEUE_NAME = "external-sync";
+exports.IMAGE_VARIANTS_QUEUE_NAME = "property-image-variants";
 function queuePrefix(config) {
     return config.get("BULLMQ_PREFIX") ?? "rezervio";
 }
@@ -50,6 +51,7 @@ exports.CANCEL_QUEUE = Symbol("CANCEL_QUEUE");
 exports.STAY_QUEUE = Symbol("STAY_QUEUE");
 exports.SETTLEMENT_QUEUE = Symbol("SETTLEMENT_QUEUE");
 exports.EXTERNAL_QUEUE = Symbol("EXTERNAL_QUEUE");
+exports.IMAGE_VARIANTS_QUEUE = Symbol("IMAGE_VARIANTS_QUEUE");
 let QueueLifecycle = class QueueLifecycle {
     redis;
     syncQueue;
@@ -61,7 +63,8 @@ let QueueLifecycle = class QueueLifecycle {
     stayQueue;
     settlementQueue;
     externalQueue;
-    constructor(redis, syncQueue, holdQueue, lifecycleQueue, notificationQueue, refundQueue, cancelQueue, stayQueue, settlementQueue, externalQueue) {
+    imageVariantsQueue;
+    constructor(redis, syncQueue, holdQueue, lifecycleQueue, notificationQueue, refundQueue, cancelQueue, stayQueue, settlementQueue, externalQueue, imageVariantsQueue) {
         this.redis = redis;
         this.syncQueue = syncQueue;
         this.holdQueue = holdQueue;
@@ -72,6 +75,7 @@ let QueueLifecycle = class QueueLifecycle {
         this.stayQueue = stayQueue;
         this.settlementQueue = settlementQueue;
         this.externalQueue = externalQueue;
+        this.imageVariantsQueue = imageVariantsQueue;
     }
     async onApplicationShutdown() {
         await this.syncQueue.close();
@@ -83,6 +87,7 @@ let QueueLifecycle = class QueueLifecycle {
         await this.stayQueue.close();
         await this.settlementQueue.close();
         await this.externalQueue.close();
+        await this.imageVariantsQueue.close();
         this.redis.disconnect();
     }
 };
@@ -98,7 +103,9 @@ QueueLifecycle = __decorate([
     __param(7, (0, common_1.Inject)(exports.STAY_QUEUE)),
     __param(8, (0, common_1.Inject)(exports.SETTLEMENT_QUEUE)),
     __param(9, (0, common_1.Inject)(exports.EXTERNAL_QUEUE)),
+    __param(10, (0, common_1.Inject)(exports.IMAGE_VARIANTS_QUEUE)),
     __metadata("design:paramtypes", [Function, bullmq_1.Queue,
+        bullmq_1.Queue,
         bullmq_1.Queue,
         bullmq_1.Queue,
         bullmq_1.Queue,
@@ -248,6 +255,20 @@ exports.QueueModule = QueueModule = __decorate([
                     },
                 }),
             },
+            {
+                provide: exports.IMAGE_VARIANTS_QUEUE,
+                inject: [exports.REDIS_CONNECTION, config_1.ConfigService],
+                useFactory: (connection, config) => new bullmq_1.Queue(exports.IMAGE_VARIANTS_QUEUE_NAME, {
+                    connection,
+                    prefix: queuePrefix(config),
+                    defaultJobOptions: {
+                        attempts: 3,
+                        backoff: { type: "exponential", delay: 30_000 },
+                        removeOnComplete: { count: 200 },
+                        removeOnFail: { count: 500 },
+                    },
+                }),
+            },
             QueueLifecycle,
         ],
         exports: [
@@ -261,6 +282,7 @@ exports.QueueModule = QueueModule = __decorate([
             exports.STAY_QUEUE,
             exports.SETTLEMENT_QUEUE,
             exports.EXTERNAL_QUEUE,
+            exports.IMAGE_VARIANTS_QUEUE,
         ],
     })
 ], QueueModule);

@@ -22,6 +22,7 @@ const publish_readiness_1 = require("../../../domain/publish-readiness");
 const slug_1 = require("../../../domain/slug");
 const geocoding_provider_1 = require("../../geocoding/domain/geocoding-provider");
 const object_storage_1 = require("../../storage/object-storage");
+const image_sources_1 = require("../images/image-sources");
 const PUBLISH_ERRORS = {
     TITLE: { field: "title", code: "TITLE_REQUIRED" },
     DESCRIPTION: { field: "description", code: "DESCRIPTION_REQUIRED" },
@@ -230,7 +231,7 @@ let HostPropertiesService = HostPropertiesService_1 = class HostPropertiesServic
             .orderBy((0, drizzle_orm_1.asc)(schema_1.propertyImages.position));
         return rows.map((row) => ({
             id: row.id,
-            url: row.objectKey ? this.storage.getPublicUrl(row.objectKey) : (row.url ?? ""),
+            ...(0, image_sources_1.imageSources)(this.storage, row),
             altText: row.altText,
             position: row.position,
         }));

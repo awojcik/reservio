@@ -20,6 +20,7 @@ const pricing_1 = require("../../domain/pricing");
 const availability_service_1 = require("../availability/availability.service");
 const database_module_1 = require("../../infrastructure/database/database.module");
 const object_storage_1 = require("../storage/object-storage");
+const image_sources_1 = require("../properties/images/image-sources");
 const num = (value) => typeof value === "number" ? value : Number(value);
 let SearchService = SearchService_1 = class SearchService {
     database;
@@ -107,11 +108,12 @@ let SearchService = SearchService_1 = class SearchService {
         )                                                                                AS amenities,
         cover.object_key                                                                 AS cover_object_key,
         cover.url                                                                        AS cover_url,
+        cover.variants_version                                                           AS cover_variants_version,
         cover.alt_text                                                                   AS cover_alt,
         count(*) OVER ()                                                                 AS total_count
       FROM properties p
       LEFT JOIN LATERAL (
-        SELECT object_key, url, alt_text FROM property_images
+        SELECT object_key, url, variants_version, alt_text FROM property_images
         WHERE property_id = p.id ORDER BY position ASC LIMIT 1
       ) cover ON TRUE
       WHERE ${where}
@@ -174,10 +176,12 @@ let SearchService = SearchService_1 = class SearchService {
         return `ARRAY[${values.map((value) => `'${value}'`).join(",")}]::text[]`;
     }
     toCoverImage(row) {
-        const url = row.cover_object_key
-            ? this.storage.getPublicUrl(row.cover_object_key)
-            : row.cover_url;
-        return url ? { url, altText: row.cover_alt, position: 0 } : null;
+        const sources = (0, image_sources_1.imageSources)(this.storage, {
+            objectKey: row.cover_object_key,
+            url: row.cover_url,
+            variantsVersion: row.cover_variants_version,
+        });
+        return sources.url ? { ...sources, altText: row.cover_alt, position: 0 } : null;
     }
     toSummary(row, nights) {
         return {

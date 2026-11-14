@@ -3,6 +3,8 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { AvailabilityCoreModule } from "../availability/availability-core.module";
 import { HostImagesService } from "./host/host-images.service";
+import { ImageVariantsService } from "./images/image-variants.service";
+import { ImageVariantsWorker } from "./images/image-variants.worker";
 import { HostPropertiesController } from "./host/host-properties.controller";
 import { HostPropertiesService } from "./host/host-properties.service";
 import { PropertiesController } from "./properties.controller";
@@ -16,7 +18,13 @@ import { PropertiesService } from "./properties.service";
 @Module({
   imports: [AuthModule, AvailabilityCoreModule],
   controllers: [PropertiesController, HostPropertiesController],
-  providers: [PropertiesService, HostPropertiesService, HostImagesService],
+  providers: [
+    PropertiesService,
+    HostPropertiesService,
+    HostImagesService,
+    ImageVariantsService,
+    ImageVariantsWorker,
+  ],
   // Availability and calendar endpoints hang off the same Property aggregate
   // and reuse its ownership check rather than re-implementing one.
   exports: [PropertiesService, HostPropertiesService],

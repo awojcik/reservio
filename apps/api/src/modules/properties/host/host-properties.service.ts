@@ -27,6 +27,7 @@ import {
 import { slugify, uniqueSlug } from "../../../domain/slug";
 import { isStorableCoordinate } from "../../geocoding/domain/geocoding-provider";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/object-storage";
+import { imageSources } from "../images/image-sources";
 import type {
   CreateHostPropertyDto,
   UpdateHostPropertyDto,
@@ -299,7 +300,7 @@ export class HostPropertiesService {
       id: row.id,
       // object_key is the storage identity; the seeded catalogue still carries
       // plain remote URLs Rezervio does not own.
-      url: row.objectKey ? this.storage.getPublicUrl(row.objectKey) : (row.url ?? ""),
+      ...imageSources(this.storage, row),
       altText: row.altText,
       position: row.position,
     }));

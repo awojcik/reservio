@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
     "db:seed": "tsx src/infrastructure/database/seed/seed.ts",
-    "admin:grant": "tsx src/infrastructure/database/grant-role.ts"
+    "admin:grant": "tsx src/infrastructure/database/grant-role.ts",
+    "image:backfill": "tsx src/infrastructure/database/image-variants-backfill.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1120.0",
@@ -41,6 +42,7 @@
     "postgres": "^3.4.7",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "0.35.3",
     "stripe": "^22.6.0"
   },
   "devDependencies": {

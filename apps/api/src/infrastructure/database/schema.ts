@@ -264,6 +264,16 @@ export const propertyImages = pgTable(
     url: text("url"),
     altText: text("alt_text"),
     position: integer("position").notNull(),
+    /**
+     * Which set of generated WebP variants exists for this photo, or null
+     * while there are none yet — just uploaded, or uploaded before variants
+     * existed. Null is an ordinary state: the photo is shown from the
+     * original until the worker catches up.
+     */
+    variantsVersion: integer("variants_version"),
+    /** The original's dimensions after EXIF orientation, recorded with the variants. */
+    width: integer("width"),
+    height: integer("height"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

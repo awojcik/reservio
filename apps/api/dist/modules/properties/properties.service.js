@@ -20,6 +20,7 @@ const availability_service_1 = require("../availability/availability.service");
 const database_module_1 = require("../../infrastructure/database/database.module");
 const schema_1 = require("../../infrastructure/database/schema");
 const object_storage_1 = require("../storage/object-storage");
+const image_sources_1 = require("./images/image-sources");
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let PropertiesService = class PropertiesService {
     database;
@@ -47,6 +48,7 @@ let PropertiesService = class PropertiesService {
             .select({
             objectKey: schema_1.propertyImages.objectKey,
             url: schema_1.propertyImages.url,
+            variantsVersion: schema_1.propertyImages.variantsVersion,
             altText: schema_1.propertyImages.altText,
             position: schema_1.propertyImages.position,
         })
@@ -54,7 +56,7 @@ let PropertiesService = class PropertiesService {
             .where((0, drizzle_orm_1.eq)(schema_1.propertyImages.propertyId, property.id))
             .orderBy((0, drizzle_orm_1.asc)(schema_1.propertyImages.position));
         const images = imageRows.map((image) => ({
-            url: this.resolveImageUrl(image),
+            ...(0, image_sources_1.imageSources)(this.storage, image),
             altText: image.altText,
             position: image.position,
         }));
@@ -132,9 +134,6 @@ let PropertiesService = class PropertiesService {
             throw new common_1.NotFoundException(`Nie znaleziono Property: ${slugOrId}`);
         }
         return property;
-    }
-    resolveImageUrl(image) {
-        return image.objectKey ? this.storage.getPublicUrl(image.objectKey) : (image.url ?? "");
     }
     defaultCheckIn() {
         return new Date().toISOString().slice(0, 10);
