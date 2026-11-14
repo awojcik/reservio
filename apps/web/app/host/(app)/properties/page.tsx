@@ -52,6 +52,7 @@ export default async function HostPropertiesPage() {
                 {property.coverImage ? (
                   <ImageWithFallback
                     src={property.coverImage.url}
+                    variants={property.coverImage.variants}
                     alt={property.coverImage.altText ?? property.title}
                     fill
                     sizes="132px"

@@ -7,6 +7,13 @@
  * these hold, and they can be tested without a renderer.
  */
 
+/** A photo as a URL, or as an object carrying one (plus its variants). */
+export type GalleryImage = string | { url: string };
+
+function frameUrl(image: GalleryImage | null | undefined): string | undefined {
+  return typeof image === "string" ? image : image?.url;
+}
+
 /** The cover is the frame the page opens on — never a random or last one. */
 export const INITIAL_FRAME = 0;
 
@@ -17,11 +24,11 @@ export const INITIAL_FRAME = 0;
  * thumbnails that look identical and fight over the active state, and an empty
  * src renders as a broken frame.
  */
-export function galleryFrames(images: readonly string[]): string[] {
+export function galleryFrames<T extends GalleryImage>(images: readonly T[]): T[] {
   const seen = new Set<string>();
 
   return images.filter((image) => {
-    const url = image?.trim();
+    const url = frameUrl(image)?.trim();
     if (!url || seen.has(url)) return false;
     seen.add(url);
     return true;
@@ -56,10 +63,10 @@ export function stepFrame(current: number, delta: number, total: number): number
 }
 
 /** The photo the large frame shows for a given selection. */
-export function activeImage(
-  frames: readonly string[],
+export function activeImage<T extends GalleryImage>(
+  frames: readonly T[],
   selected: number,
-): string | undefined {
+): T | undefined {
   return frames[clampFrame(selected, frames.length)];
 }
 

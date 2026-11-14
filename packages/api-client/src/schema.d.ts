@@ -2290,8 +2290,21 @@ export interface components {
             /** @description Zajęte terminy. Źródło blokady, notatki i błędy synchronizacji nie są ujawniane. */
             unavailableRanges: components["schemas"]["UnavailableRangeDto"][];
         };
+        ImageVariantsDto: {
+            /** @description max. 240 px szerokości */
+            thumb: string;
+            /** @description max. 640 px szerokości */
+            card: string;
+            /** @description max. 1200 px szerokości */
+            detail: string;
+            /** @description max. 1600 px szerokości */
+            hero: string;
+        };
         PropertyImageDto: {
+            /** @description Oryginał; zawsze dostępny */
             url: string;
+            /** @description null, dopóki warianty nie zostały wygenerowane — wtedy używaj url */
+            variants: components["schemas"]["ImageVariantsDto"] | null;
             altText: string | null;
             /** @example 0 */
             position: number;
@@ -2413,6 +2426,8 @@ export interface components {
             id: string;
             /** @example http://localhost:9000/rezervio-local/properties/…/a.jpg */
             url: string;
+            /** @description null zaraz po wgraniu, dopóki worker nie wygeneruje wariantów */
+            variants: components["schemas"]["ImageVariantsDto"] | null;
             altText: string | null;
             /**
              * @description position = 0 oznacza zdjęcie główne

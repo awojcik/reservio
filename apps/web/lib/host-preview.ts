@@ -31,6 +31,7 @@ export function toPreviewDetail(property: HostProperty): PropertyDetail {
     coverImage: property.images[0]
       ? {
           url: property.images[0].url,
+          variants: property.images[0].variants,
           altText: property.images[0].altText,
           position: property.images[0].position,
         }
@@ -46,6 +47,7 @@ export function toPreviewDetail(property: HostProperty): PropertyDetail {
     distanceToBeachMeters: null,
     images: property.images.map((image) => ({
       url: image.url,
+      variants: image.variants,
       altText: image.altText,
       position: image.position,
     })),

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import type { PropertyImage } from "@rezervio/api-client";
+
 import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import { cn } from "@/lib/cn";
 import {
@@ -13,7 +15,7 @@ import {
 } from "@/lib/gallery";
 
 type GalleryProps = {
-  images: string[];
+  images: Pick<PropertyImage, "url" | "variants">[];
   title: string;
 };
 
@@ -60,8 +62,9 @@ export function Gallery({ images, title }: GalleryProps) {
         {frames.map((image, index) =>
           mounted.includes(index) ? (
             <ImageWithFallback
-              key={image}
-              src={image}
+              key={image.url}
+              src={image.url}
+              variants={image.variants}
               alt={index === active ? `${title} — zdjęcie ${index + 1}` : ""}
               fill
               // The cover is this page's largest contentful paint.
@@ -105,7 +108,7 @@ export function Gallery({ images, title }: GalleryProps) {
         >
           {frames.map((image, index) => (
             <button
-              key={image}
+              key={image.url}
               type="button"
               data-state={thumbnailState(index, active)}
               aria-pressed={index === active}
@@ -120,7 +123,8 @@ export function Gallery({ images, title }: GalleryProps) {
               )}
             >
               <ImageWithFallback
-                src={image}
+                src={image.url}
+                variants={image.variants}
                 alt=""
                 fill
                 loading="lazy"

@@ -211,6 +211,7 @@ export function ImageManager({
               >
                 <ImageWithFallback
                   src={image.url}
+                  variants={image.variants}
                   alt={image.altText ?? "Zdjęcie obiektu"}
                   fill
                   sizes="(max-width: 640px) 50vw, 240px"

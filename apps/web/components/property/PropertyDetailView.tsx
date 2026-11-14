@@ -95,7 +95,7 @@ export function PropertyDetailView({
       </div>
 
       <Gallery
-        images={property.images.map((image) => image.url)}
+        images={property.images}
         title={property.title}
       />
 

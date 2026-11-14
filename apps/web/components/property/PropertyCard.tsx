@@ -99,6 +99,7 @@ export function PropertyCard({
       <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-placeholder">
         <ImageWithFallback
           src={property.coverImage?.url ?? ""}
+          variants={property.coverImage?.variants}
           alt={`${property.title} — ${property.district}, ${property.city}`}
           fill
           sizes="(max-width: 640px) 100vw, 232px"

@@ -7,6 +7,7 @@ import type { components, operations } from "./schema";
  */
 export type PriceQuote = components["schemas"]["PriceQuoteDto"];
 export type PropertyImage = components["schemas"]["PropertyImageDto"];
+export type ImageVariants = components["schemas"]["ImageVariantsDto"];
 export type PropertySummary = components["schemas"]["PropertySummaryDto"];
 export type PropertyDetail = components["schemas"]["PropertyDetailDto"];
 export type SearchResponse = components["schemas"]["SearchResponseDto"];

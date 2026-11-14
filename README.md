@@ -578,6 +578,13 @@ w konsoli.
 Limity (walidowane po stronie serwera): JPEG/PNG/WebP, 5 MB na zdjęcie,
 30 zdjęć na obiekt. `position = 0` to zdjęcie główne.
 
+Po potwierdzeniu uploadu worker generuje cztery warianty WebP (240, 640,
+1200, 1600 px), które przeglądarka pobiera wprost ze storage, bez
+`/_next/image`. Lokalnie robi to samo `pnpm dev` (API uruchamia workery
+w swoim procesie); dopóki warianty nie powstaną, zdjęcie pokazuje się
+z oryginału, jak wcześniej. Zdjęcia sprzed wariantów:
+`pnpm --filter @rezervio/api image:backfill [--dry-run]`.
+
 Produkcyjnie ten sam kod działa na DigitalOcean Spaces — wystarczy zmienić
 zmienne `S3_*`. Lista hostów dozwolonych dla `next/image` jest wyprowadzana
 z `S3_PUBLIC_BASE_URL`, więc zmiana storage nie wymaga edycji `next.config.ts`.

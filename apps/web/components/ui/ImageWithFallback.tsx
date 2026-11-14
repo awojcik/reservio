@@ -3,11 +3,21 @@
 import Image, { type ImageProps } from "next/image";
 import { useState } from "react";
 
-import { cn } from "@/lib/cn";
+import type { ImageVariants } from "@rezervio/api-client";
 
-type ImageWithFallbackProps = Omit<ImageProps, "onError"> & {
+import { cn } from "@/lib/cn";
+import { variantLoader } from "@/lib/image-variants";
+
+type ImageWithFallbackProps = Omit<ImageProps, "onError" | "loader"> & {
   /** Shown instead of the photo when the remote image fails. */
   fallbackLabel?: string;
+  /**
+   * Ready-made widths of this photo on the CDN. When present they are used
+   * directly and the photo never passes through `/_next/image`; when absent —
+   * not generated yet, or a photo Rezervio does not store — it is optimised
+   * exactly as before.
+   */
+  variants?: ImageVariants | null;
 };
 
 /**
@@ -19,6 +29,7 @@ export function ImageWithFallback({
   fallbackLabel = "rezervio",
   className,
   alt,
+  variants,
   ...props
 }: ImageWithFallbackProps) {
   const [failed, setFailed] = useState(false);
@@ -50,6 +61,7 @@ export function ImageWithFallback({
       alt={alt}
       className={className}
       onError={() => setFailed(true)}
+      loader={variants ? variantLoader(variants) : undefined}
       {...props}
     />
   );

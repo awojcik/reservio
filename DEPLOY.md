@@ -501,6 +501,32 @@ Dwie pułapki, obie już kosztowały jeden nieudany reload:
   Next nie ma gdzie zapisać `.next/cache/images`, zapis pada po cichu i
   `X-Nextjs-Cache` zostaje `MISS` na zawsze.
 
+### Warianty zdjęć — CDN zamiast optymalizatora
+
+Zdjęcia ofert nie przechodzą już przez `/_next/image`: worker generuje przy
+uploadzie cztery pliki WebP, a przeglądarka pobiera je prosto z Spaces CDN
+(szczegóły: [architektura → Warianty zdjęć](docs/architecture.md#warianty-zdjęć)).
+Cache nginx dla `/_next/image` zostaje dla zdjęć bez wariantów.
+
+**Raz, w panelu DO:** Spaces → bucket → Settings → CDN → **Edge Cache TTL**
+na najdłuższą dostępną wartość. Pliki wariantów mają
+`Cache-Control: public, max-age=31536000, immutable` — przeglądarka trzyma je
+rok — ale krawędź CDN słucha własnego ustawienia (domyślnie 1 h).
+
+**Po pierwszym deployu z wariantami** — zdjęcia wgrane wcześniej nie mają
+plików WebP, dopóki ich nie zlecisz:
+
+```bash
+podman exec rezervio-api node dist/infrastructure/database/image-variants-backfill.js --dry-run
+podman exec rezervio-api node dist/infrastructure/database/image-variants-backfill.js
+podman logs -f rezervio-worker 2>&1 | grep property.image.variants
+```
+
+Skrypt tylko zleca joby; worker przetwarza je po jednym. Przerwanie i
+ponowne uruchomienie jest bezpieczne — przetworzone zdjęcia wypadają z
+zapytania, zlecone rozpoznaje `jobId`. To samo polecenie po podbiciu
+`VARIANTS_VERSION`.
+
 ### Uwaga: certbot i szablon dzielą jeden plik
 
 Certbot wpisuje swój blok `listen 443` i przekierowanie z HTTP do
@@ -839,6 +865,11 @@ podman exec rezervio-api printenv S3_PUBLIC_BASE_URL
 #                                          bez zapisu — §Cache zoptymalizowanych zdjęć
 curl -sI "https://rezervio.pl/_next/image?url=<zakodowany-url>&w=640&q=75" \
   | grep -i -E '^HTTP|x-rezervio-image-cache'
+#  zdjęcie nadal idzie przez /_next/image  brak wariantów: variants_version NULL
+#                                          → backfill (§Warianty zdjęć), logi workera
+podman exec rezervio-postgres psql -U rezervio -d rezervio -c \
+  "SELECT variants_version, count(*) FROM property_images WHERE object_key IS NOT NULL GROUP BY 1"
+podman logs rezervio-worker --since 1h 2>&1 | grep -E 'variants_(generated|failed|original_missing)'
 
 # Miejsce na dysku
 df -h / && podman system df && du -sh /opt/rezervio/backups

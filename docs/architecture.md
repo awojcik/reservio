@@ -223,6 +223,48 @@ magic bytes         → JPEG FF D8 FF · PNG 8 bajtów sygnatury · WebP RIFF???
   `dto/host-image.dto.ts` (API) i `MAX_UPLOAD_BYTES` w `apps/web/lib/upload.ts`
   (front, żeby nie marnować uploadu). Muszą być równe.
 
+### Warianty zdjęć
+
+Zdjęcie jest przekodowywane **raz, przy uploadzie, w workerze**, a nie przy
+każdym żądaniu przez optymalizator Next na jednym vCPU:
+
+```text
+confirm → wiersz PropertyImage → kolejka property-image-variants (jobId per zdjęcie i wersja)
+worker (concurrency 1) → oryginał ze storage → sharp → 4 × WebP → storage
+                       → UPDATE property_images SET variants_version, width, height
+przeglądarka → next/image z własnym loaderem → plik prosto z CDN, bez /_next/image
+```
+
+```text
+thumb   240 px  q75        klucz: properties/{propertyId}/{uuid}/v{N}/{nazwa}.webp
+card    640 px  q75        Cache-Control: public, max-age=31536000, immutable
+detail 1200 px  q80        bez powiększania mniejszych zdjęć (withoutEnlargement)
+hero   1600 px  q80        orientacja EXIF zastosowana, metadane usunięte
+```
+
+- **`variants_version` NULL to zwykły stan**, nie błąd: zdjęcie dopiero co
+  wgrane albo sprzed wariantów. API zwraca wtedy `variants: null`, a front
+  pokazuje oryginał przez optymalizator, dokładnie jak wcześniej. Nie ma
+  osobnego stanu PROCESSING.
+- **Wersja w ścieżce**, bo URL z `immutable` nie może zmienić treści. Zmiana
+  rozmiarów, jakości lub formatu to podbicie `VARIANTS_VERSION`
+  (`apps/api/src/modules/properties/images/image-variants.ts`) i backfill:
+  nowe pliki trafiają pod nowe URL-e.
+- **Idempotencja:** worker przeładowuje wiersz i kończy, gdy wersja jest
+  aktualna; te same klucze zapisane drugi raz to te same bajty. Zdjęcie
+  usunięte w trakcie pracy — worker sprząta po sobie.
+- **Pamięć:** libvips alokuje poza heapem V8, więc `WORKER_HEAP_MB` jej nie
+  ogranicza. Stąd `sharp.concurrency(1)`, `sharp.cache(false)` i limit 40 MP
+  na wejściu.
+- **Usunięcie zdjęcia** kasuje oryginał i warianty każdej wersji; nieudane
+  kasowanie jest logowane jako `property.image.object_orphaned`.
+- **Wybór wariantu** robi przeglądarka z `srcset`, który buduje `next/image`
+  z `sizes`. Loader (`apps/web/lib/image-variants.ts`) mapuje żądaną
+  szerokość na najmniejszy wystarczający wariant, z 10% tolerancji.
+- **Bez wariantów zostają:** katalog z seeda (zdalne URL-e Unsplash) i
+  `cover_image_url_snapshot` w rezerwacji — snapshot to URL oryginału z chwili
+  rezerwacji i tak zostaje.
+
 Transakcja bazodanowa **nigdy** nie obejmuje wywołania sieciowego do storage.
 Przy usuwaniu zdjęcia najpierw commitujemy zmianę w bazie, a dopiero potem
 kasujemy plik; osierocony plik jest logowany i nieszkodliwy, natomiast błąd
