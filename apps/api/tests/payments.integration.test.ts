@@ -537,6 +537,36 @@ describe("failed payment", () => {
     expect((await bookingRow(booking.id)).status).toBe("CONFIRMED");
   });
 
+  /**
+   * What the payment form actually does after a decline: the Guest enters
+   * another card in the same form, so the second attempt confirms the *same*
+   * PaymentIntent — whose Payment the decline already marked FAILED.
+   */
+  it("confirms when the Guest pays again on the same intent after a decline", async () => {
+    const booking = await payableBooking();
+    const started = await startPayment(booking);
+    const intent = provider.intentFor(started.json().paymentId)!;
+
+    await postEvent({
+      id: "evt_declined_same_intent",
+      type: "payment_intent.payment_failed",
+      payment: {
+        providerPaymentId: intent,
+        amountMinor: booking.totalAmountMinor,
+        currency: "PLN",
+        status: "FAILED",
+        failureCode: "card_declined",
+      },
+    });
+    expect((await paymentRow(booking.id)).status).toBe("FAILED");
+
+    await succeededEvent(intent, booking.totalAmountMinor);
+
+    expect((await bookingRow(booking.id)).status).toBe("CONFIRMED");
+    expect((await holdRow(booking.id)).status).toBe("CONVERTED");
+    expect((await paymentRow(booking.id)).status).toBe("SUCCEEDED");
+  });
+
   it("refuses a retry once the hold has expired", async () => {
     const booking = await payableBooking();
     await startPayment(booking);

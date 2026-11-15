@@ -459,10 +459,16 @@ export class StripePaymentProvider implements PaymentProvider {
   /** Keeps Stripe's exception shape out of everything above this class. */
   private wrap(error: unknown, message: string): PaymentProviderError {
     if (error instanceof Stripe.errors.StripeError) {
+      // Enough to find the request in Stripe's dashboard — never the
+      // message, which can echo request parameters.
       this.logger.warn({
         event: "payment.provider_error",
+        operation: message,
         type: error.type,
         code: error.code ?? null,
+        declineCode: (error as { decline_code?: string }).decline_code ?? null,
+        statusCode: error.statusCode ?? null,
+        requestId: error.requestId ?? null,
       });
 
       const retryable =

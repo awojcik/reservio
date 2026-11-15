@@ -16,6 +16,7 @@ import { StayDetailsPanel } from "@/components/booking/StayDetailsPanel";
 import { Header } from "@/components/layout/Header";
 import { buttonStyles } from "@/components/ui/Button";
 import { createSessionApiClient } from "@/lib/api-server";
+import { PAYMENT_MESSAGES } from "@/lib/payment-errors";
 import {
   BOOKING_STATUS_LABELS,
   BOOKING_STATUS_REASONS,
@@ -149,12 +150,8 @@ export default async function BookingStatusPage({ params, searchParams }: PagePr
               role="alert"
               className="mt-4 rounded-[10px] border border-accent-edge/40 bg-accent/10 px-3.5 py-2.5 text-[14px]"
             >
-              Płatność nie powiodła się. Spróbuj ponownie przed wygaśnięciem blokady.
-              {booking.payment?.failureMessage ? (
-                <span className="mt-1 block text-muted">
-                  {booking.payment.failureMessage}
-                </span>
-              ) : null}
+              {/* Mapped, never the provider's own wording (lib/payment-errors). */}
+              {PAYMENT_MESSAGES.declined}
             </p>
           ) : null}
 

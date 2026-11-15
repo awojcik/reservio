@@ -9,7 +9,7 @@ import {
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { Lock, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, type PaymentIntent } from "@rezervio/api-client";
 
@@ -17,6 +17,12 @@ import { HoldCountdown } from "@/components/booking/HoldCountdown";
 import { Button } from "@/components/ui/Button";
 import { apiClient } from "@/lib/api";
 import { formatAmountMinor } from "@/lib/format";
+import {
+  PAYMENT_MESSAGES,
+  confirmErrorMessage,
+  diagnosticsOf,
+  startErrorMessage,
+} from "@/lib/payment-errors";
 
 /**
  * Card details never reach Rezervio.
@@ -86,15 +92,14 @@ export function PaymentPanel({
   }, [reference, router]);
 
   if (!PUBLISHABLE_KEY) {
+    // A deployment mistake, not something a Guest can fix or should read
+    // about: the key is baked into the web image at build time.
+    if (process.env.NODE_ENV !== "production") {
+      console.error("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set in this build.");
+    }
     return (
       <Panel>
-        <p className="text-[15px] text-muted">
-          Płatności nie są skonfigurowane w tym środowisku. Ustaw{" "}
-          <code className="font-mono text-[13px]">
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-          </code>
-          , żeby dokończyć rezerwację.
-        </p>
+        <p className="text-[15px] text-muted">{PAYMENT_MESSAGES.unavailable}</p>
       </Panel>
     );
   }
@@ -102,7 +107,7 @@ export function PaymentPanel({
   if (loading) {
     return (
       <Panel>
-        <p className="text-[15px] text-muted">Przygotowuję płatność…</p>
+        <p className="text-[15px] text-muted">Przygotowujemy płatność…</p>
       </Panel>
     );
   }
@@ -110,7 +115,7 @@ export function PaymentPanel({
   if (error || !intent) {
     return (
       <Panel>
-        <p className="text-[15px] text-muted">{error ?? "Nie udało się rozpocząć płatności."}</p>
+        <p className="text-[15px] text-muted">{error ?? PAYMENT_MESSAGES.generic}</p>
       </Panel>
     );
   }
@@ -118,7 +123,7 @@ export function PaymentPanel({
   return (
     <Panel>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[19px] font-bold tracking-tight">Zapłać za rezerwację</h2>
+        <h2 className="text-[19px] font-bold tracking-tight">Płatność</h2>
         <span className="text-[20px] font-bold tabular-nums">
           {formatAmountMinor(totalAmountMinor)}
         </span>
@@ -155,7 +160,13 @@ function PaymentForm({ reference }: { reference: string }) {
   const router = useRouter();
 
   const [pending, setPending] = useState(false);
+  // The card form loads inside Stripe's frame after Stripe.js itself; paying
+  // before it is ready would submit an empty form.
+  const [ready, setReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // State updates are asynchronous, so a fast double click can pass the
+  // `pending` check twice; the ref cannot.
+  const submitting = useRef(false);
 
   const returnUrl = useMemo(
     () =>
@@ -167,8 +178,9 @@ function PaymentForm({ reference }: { reference: string }) {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!stripeJs || !elements) return;
+    if (!stripeJs || !elements || !ready || submitting.current) return;
 
+    submitting.current = true;
     setPending(true);
     setMessage(null);
 
@@ -188,10 +200,14 @@ function PaymentForm({ reference }: { reference: string }) {
     });
 
     if (result.error) {
-      setMessage(
-        result.error.message ??
-          "Płatność nie powiodła się. Spróbuj ponownie przed wygaśnięciem blokady.",
-      );
+      // Identifiers only — the type, codes and Stripe's request log — so a
+      // failed attempt can be found in the dashboard. No card data reaches
+      // this object, and the client secret is never part of it.
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("payment.confirm_failed", diagnosticsOf(result.error));
+      }
+      setMessage(confirmErrorMessage(result.error));
+      submitting.current = false;
       setPending(false);
       return;
     }
@@ -209,12 +225,24 @@ function PaymentForm({ reference }: { reference: string }) {
     await apiClient.syncPayment(reference).catch(() => undefined);
 
     router.refresh();
+    submitting.current = false;
     setPending(false);
   }
 
   return (
     <form onSubmit={submit} className="mt-5">
-      <PaymentElement options={{ layout: "tabs" }} />
+      <PaymentElement
+        options={{ layout: "tabs" }}
+        onReady={() => setReady(true)}
+        onLoadError={(event) => {
+          // The form itself could not load — a key or intent from the wrong
+          // account, or Stripe unreachable. The Guest can only try later.
+          if (process.env.NODE_ENV !== "production") {
+            console.error("payment.element_load_failed", diagnosticsOf(event.error));
+          }
+          setMessage(PAYMENT_MESSAGES.unavailable);
+        }}
+      />
 
       {message ? (
         <p
@@ -230,10 +258,10 @@ function PaymentForm({ reference }: { reference: string }) {
         variant="accent"
         size="lg"
         className="mt-5 w-full"
-        disabled={!stripeJs || pending}
+        disabled={!stripeJs || !ready || pending}
       >
         <Lock size={16} strokeWidth={2.5} />
-        {pending ? "Przetwarzam…" : "Zapłać"}
+        {pending ? "Przetwarzanie płatności…" : "Zapłać"}
       </Button>
     </form>
   );
@@ -260,15 +288,6 @@ function codeOf(error: unknown): string | undefined {
 }
 
 function describe(error: unknown): string {
-  if (!(error instanceof ApiError)) return "Nie udało się rozpocząć płatności.";
-
-  const code = codeOf(error);
-
-  if (code === "BOOKING_HOLD_EXPIRED") {
-    return "Termin nie jest już zablokowany. Sprawdź ponownie dostępność.";
-  }
-  if (code === "BOOKING_NOT_PAYABLE") {
-    return "Ta rezerwacja nie oczekuje na płatność.";
-  }
-  return "Nie udało się rozpocząć płatności. Spróbuj ponownie.";
+  if (!(error instanceof ApiError)) return PAYMENT_MESSAGES.connection;
+  return startErrorMessage(codeOf(error), error.status);
 }

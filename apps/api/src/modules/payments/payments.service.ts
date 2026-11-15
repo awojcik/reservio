@@ -690,6 +690,7 @@ export class PaymentsService {
       event: "payment.failed",
       paymentId: payment.id,
       bookingId: payment.bookingId,
+      providerPaymentId: payment.providerPaymentId,
       code: provider.failureCode ?? null,
     });
   }

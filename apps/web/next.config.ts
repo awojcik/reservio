@@ -89,6 +89,8 @@ function contentSecurityPolicy(): string {
     "script-src": [
       "'self'",
       "https://js.stripe.com",
+      // Stripe.js starts its frames on per-feature subdomains where it can.
+      "https://*.js.stripe.com",
       // Next.js ships inline bootstrap scripts; the dev server also evals.
       "'unsafe-inline'",
       ...(development ? ["'unsafe-eval'"] : []),
@@ -100,6 +102,9 @@ function contentSecurityPolicy(): string {
       "blob:",
       "https://images.unsplash.com",
       ...storageOrigins,
+      // Card brand marks inside the Payment Element, and Link's.
+      "https://*.stripe.com",
+      "https://*.link.com",
       // The basemap's sprite sheet and its shaded-relief tiles at low zoom.
       "https://tiles.openfreemap.org",
     ],
@@ -122,12 +127,28 @@ function contentSecurityPolicy(): string {
       ...storageOrigins,
       "https://api.stripe.com",
       "https://maps.stripe.com",
+      // Link, which the Payment Element offers by default with automatic
+      // payment methods.
+      "https://link.com",
+      "https://*.link.com",
       // Map tiles and glyphs.
       "https://tiles.openfreemap.org",
       ...(development ? ["ws:", "http://localhost:*"] : []),
     ],
-    // Stripe Elements and 3-D Secure both render inside Stripe-served frames.
-    "frame-src": ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"],
+    /*
+     * Stripe Elements and 3-D Secure both render inside Stripe-served frames.
+     * The list is Stripe's own (docs.stripe.com/security/guide, "Stripe.js"
+     * and "Link"); a frame it is missing does not error loudly, it simply
+     * never appears, and the card form stays blank or cannot pay.
+     */
+    "frame-src": [
+      "'self'",
+      "https://js.stripe.com",
+      "https://*.js.stripe.com",
+      "https://hooks.stripe.com",
+      "https://link.com",
+      "https://*.link.com",
+    ],
     // MapLibre runs its renderer in a blob worker.
     "worker-src": ["'self'", "blob:"],
   };

@@ -137,7 +137,7 @@ export function FinanceOverview({
                     >
                       {releasing === settlement.id
                         ? "Zwalniam…"
-                        : "Zwolnij środki teraz — sandbox"}
+                        : "Zwolnij środki teraz"}
                     </Button>
                   ) : null}
                 </div>

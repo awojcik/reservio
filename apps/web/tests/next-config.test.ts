@@ -137,6 +137,12 @@ describe("security headers", () => {
     expect(policy).toMatch(/frame-src[^;]*https:\/\/js\.stripe\.com/);
     expect(policy).toMatch(/frame-src[^;]*https:\/\/hooks\.stripe\.com/);
     expect(policy).toMatch(/connect-src[^;]*https:\/\/api\.stripe\.com/);
+    // The rest of Stripe's published list for Stripe.js and Link.
+    expect(policy).toMatch(/script-src[^;]*https:\/\/\*\.js\.stripe\.com/);
+    expect(policy).toMatch(/frame-src[^;]*https:\/\/\*\.js\.stripe\.com/);
+    expect(policy).toMatch(/frame-src[^;]*https:\/\/\*\.link\.com/);
+    expect(policy).toMatch(/connect-src[^;]*https:\/\/\*\.link\.com/);
+    expect(policy).toMatch(/img-src[^;]*https:\/\/\*\.stripe\.com/);
   });
 
   it("allows the browser to reach the API it was configured with", async () => {
