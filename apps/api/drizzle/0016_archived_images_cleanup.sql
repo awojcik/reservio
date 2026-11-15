@@ -1,0 +1,1 @@
+ALTER TABLE "properties" ADD COLUMN "images_cleaned_at" timestamp with time zone;

@@ -16,10 +16,16 @@ import {
   workerConcurrency,
   type ImageVariantsJob,
 } from "../../../infrastructure/queue/queue.module";
+import {
+  ArchivedImagesService,
+  CLEANUP_JOB,
+  CLEANUP_SWEEP_JOB,
+} from "./archived-images.service";
 import { ImageVariantsService } from "./image-variants.service";
 
 /**
- * Consumes the photo-variant queue, one photo at a time.
+ * Consumes the photo queue — variants for new uploads, cleanup for archived
+ * Properties — one job at a time.
  *
  * Concurrency 1 on purpose, whatever `WORKER_CONCURRENCY` says: a resize is
  * pure CPU, and the droplet has exactly one core shared with the API and the
@@ -34,12 +40,14 @@ export class ImageVariantsWorker implements OnModuleInit, OnApplicationShutdown 
   constructor(
     @Inject(REDIS_CONNECTION) private readonly connection: Redis,
     private readonly variants: ImageVariantsService,
+    private readonly archived: ArchivedImagesService,
     private readonly config: ConfigService,
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     if (this.config.get("DISABLE_IMAGE_WORKER") === "true") return;
     this.start();
+    await this.archived.scheduleSweep();
   }
 
   start(): Worker<ImageVariantsJob> {
@@ -47,7 +55,11 @@ export class ImageVariantsWorker implements OnModuleInit, OnApplicationShutdown 
 
     this.worker = new Worker<ImageVariantsJob>(
       IMAGE_VARIANTS_QUEUE_NAME,
-      (job) => this.variants.generate(job.data.imageId),
+      (job) => {
+        if (job.name === CLEANUP_SWEEP_JOB) return this.archived.enqueueDue();
+        if (job.name === CLEANUP_JOB) return this.archived.cleanup(job.data.propertyId!);
+        return this.variants.generate(job.data.imageId!);
+      },
       {
         connection: this.connection,
         concurrency: workerConcurrency(this.config, 1),
@@ -55,12 +67,16 @@ export class ImageVariantsWorker implements OnModuleInit, OnApplicationShutdown 
       },
     );
 
-    // Until it succeeds the photo is shown from its original, so a failure
-    // here is slower photos, never missing ones.
+    // A failed variant job means slower photos, never missing ones; a failed
+    // cleanup leaves files in storage until a retry or the sweep removes them.
     this.worker.on("failed", (job, error) => {
       this.logger.warn({
-        event: "property.image.variants_failed",
+        event:
+          job?.name === CLEANUP_JOB
+            ? "property.archive.images_cleanup_failed"
+            : "property.image.variants_failed",
         imageId: job?.data.imageId,
+        propertyId: job?.data.propertyId,
         jobId: job?.id,
         attempts: job?.attemptsMade,
         reason: error.message,

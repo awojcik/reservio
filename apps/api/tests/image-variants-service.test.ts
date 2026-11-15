@@ -24,7 +24,13 @@ const IMAGE_ID = "33333333-3333-4333-8333-333333333333";
 const PROPERTY_ID = "11111111-1111-4111-8111-111111111111";
 const OBJECT_KEY = `properties/${PROPERTY_ID}/22222222-2222-4222-8222-222222222222.jpg`;
 
-type Row = { id: string; propertyId: string; objectKey: string | null; variantsVersion: number | null };
+type Row = {
+  id: string;
+  propertyId: string;
+  objectKey: string | null;
+  variantsVersion: number | null;
+  propertyStatus: string;
+};
 
 function photo(): Promise<Buffer> {
   return sharp({ create: { width: 2000, height: 1500, channels: 3, background: "#3a6" } })
@@ -50,7 +56,7 @@ function harness(row: Row | null, original: Buffer | null, options: { deletedMea
 
   const select = () => {
     const chain: Record<string, unknown> = {};
-    for (const method of ["from", "where", "limit"]) chain[method] = () => chain;
+    for (const method of ["from", "innerJoin", "where", "limit"]) chain[method] = () => chain;
     chain.then = (resolve: (rows: unknown[]) => unknown) => resolve(row ? [row] : []);
     return chain;
   };
@@ -75,7 +81,13 @@ function harness(row: Row | null, original: Buffer | null, options: { deletedMea
   return { service, storage, puts, updates };
 }
 
-const ROW: Row = { id: IMAGE_ID, propertyId: PROPERTY_ID, objectKey: OBJECT_KEY, variantsVersion: null };
+const ROW: Row = {
+  id: IMAGE_ID,
+  propertyId: PROPERTY_ID,
+  objectKey: OBJECT_KEY,
+  variantsVersion: null,
+  propertyStatus: "PUBLISHED",
+};
 
 describe("generating a photo's variants", () => {
   it("writes four public, immutable WebP files and records the version", async () => {
@@ -138,6 +150,15 @@ describe("generating a photo's variants", () => {
     });
   });
 
+  /** A job queued before the archive must not undo the archive's cleanup. */
+  it("does nothing for a photo of an archived Property", async () => {
+    const { service, storage, puts } = harness({ ...ROW, propertyStatus: "ARCHIVED" }, await photo());
+
+    await expect(service.generate(IMAGE_ID)).resolves.toEqual({ status: "skipped", reason: "archived" });
+    expect(storage.getObject).not.toHaveBeenCalled();
+    expect(puts).toHaveLength(0);
+  });
+
   it("removes what it wrote when the photo was deleted while it worked", async () => {
     const { service, storage } = harness(ROW, await photo(), { deletedMeanwhile: true });
 
@@ -197,7 +218,7 @@ describe("requesting variants", () => {
     expect(q.add).toHaveBeenCalledWith("generate", { imageId: IMAGE_ID }, {
       jobId: variantsJobId(IMAGE_ID),
     });
-    expect(variantsJobId(IMAGE_ID)).toBe(`variants:${IMAGE_ID}:v${VARIANTS_VERSION}`);
+    expect(variantsJobId(IMAGE_ID)).toBe(`variants-${IMAGE_ID}-v${VARIANTS_VERSION}`);
   });
 
   it("leaves a job that is waiting, running or done alone", async () => {

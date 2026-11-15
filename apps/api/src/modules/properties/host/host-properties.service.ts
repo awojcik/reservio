@@ -27,6 +27,7 @@ import {
 import { slugify, uniqueSlug } from "../../../domain/slug";
 import { isStorableCoordinate } from "../../geocoding/domain/geocoding-provider";
 import { OBJECT_STORAGE, type ObjectStorage } from "../../storage/object-storage";
+import { ArchivedImagesService } from "../images/archived-images.service";
 import { imageSources } from "../images/image-sources";
 import type {
   CreateHostPropertyDto,
@@ -61,6 +62,7 @@ export class HostPropertiesService {
   constructor(
     @Inject(DATABASE) private readonly database: Database,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
+    private readonly archivedImages: ArchivedImagesService,
   ) {}
 
   async list(hostId: string): Promise<HostPropertySummaryDto[]> {
@@ -268,10 +270,28 @@ export class HostPropertiesService {
     return this.transition(hostId, current, "SUSPENDED", "property.unpublished");
   }
 
-  /** Never a hard delete — history is preserved (domain language §21). */
+  /**
+   * Never a hard delete — the rows and the history stay (domain language
+   * §21). The photos go: ARCHIVED is terminal, and the worker removes them
+   * from storage, keeping any original a Booking still points at.
+   */
   async archive(hostId: string, id: string): Promise<HostPropertyDetailDto> {
     const current = await this.findOwned(hostId, id);
-    return this.transition(hostId, current, "ARCHIVED", "property.archived");
+    const detail = await this.transition(hostId, current, "ARCHIVED", "property.archived");
+
+    if (current.status !== "ARCHIVED") {
+      // A queue that is down must not fail an archive that already happened;
+      // the cleanup sweep finds every archived Property not yet cleaned.
+      await this.archivedImages.requestCleanup(current.id).catch((error: unknown) => {
+        this.logger.warn({
+          event: "property.archive.cleanup_enqueue_failed",
+          propertyId: current.id,
+          reason: (error as Error).message,
+        });
+      });
+    }
+
+    return detail;
   }
 
   /**

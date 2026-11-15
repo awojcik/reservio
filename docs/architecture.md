@@ -165,7 +165,33 @@ DRAFT ──publish──▶ PUBLISHED ──unpublish──▶ SUSPENDED
   └────────────────────┴────archive─────────────┴──▶ ARCHIVED
 ```
 
-`ARCHIVED` jest stanem końcowym — danych nie usuwamy twardo.
+`ARCHIVED` jest stanem końcowym — danych nie usuwamy twardo. Nie ma
+przywracania z archiwum ani w API, ani w UI.
+
+**Zdjęcia zarchiwizowanego obiektu** usuwa worker (job `cleanup-archived` w
+kolejce `property-image-variants`), bo nikt ich już nie zobaczy:
+
+```text
+archive → job cleanup-archived (tylko przy faktycznym przejściu do ARCHIVED)
+worker  → dla każdego zdjęcia: warianty wszystkich wersji + oryginał
+          OPRÓCZ oryginału, na który wskazuje bookings.cover_image_url_snapshot
+        → properties.images_cleaned_at = now()
+sweep   → co 6 h: ARCHIVED AND images_cleaned_at IS NULL → job ponownie
+```
+
+- **Wiersze `property_images` zostają** — usuwamy pliki, nie historię.
+- **Okładka z historii gościa zostaje.** Snapshot w rezerwacji to URL
+  oryginału, który gość widzi w „Moich podróżach”; porównujemy po sufiksie
+  klucza, więc zmiana hosta origin/CDN nie psuje dopasowania.
+- **Retry bez połowicznego stanu:** błąd storage przerywa job, BullMQ ponawia
+  go od początku (usunięcie nieistniejącego klucza to sukces), a
+  `images_cleaned_at` zapisujemy na końcu. Wyczerpane próby widać w `/admin`
+  → Zadania; sweep i tak wróci do obiektu.
+- **Izolacja:** kasujemy tylko klucze z prefiksem `properties/{propertyId}/`.
+- Po archiwizacji API odrzuca nowe zdjęcia (409), a job wariantów pomija
+  zdjęcia archiwum, żeby nie odtworzyć usuniętych plików.
+- **Luki świadomie pozostawione:** archiwizacja nie blokuje obiektu z
+  nadchodzącymi rezerwacjami; nie ma trwałego usunięcia (purge) wierszy.
 
 ## Zdjęcia i object storage
 

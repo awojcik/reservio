@@ -134,11 +134,16 @@ export type ExternalSyncJob = {
 };
 
 /**
- * Generating the WebP variants of one uploaded photo. The id only; the worker
- * reloads the row, which says whether there is anything left to do.
+ * Work on stored photos, ids only; the worker reloads the rows, which say
+ * whether there is anything left to do.
+ *
+ *   generate          `imageId`    — the WebP variants of one uploaded photo
+ *   cleanup-archived  `propertyId` — the photos of a Property that was archived
+ *   cleanup-sweep     neither      — re-queues archived Properties not yet cleaned
  */
 export type ImageVariantsJob = {
-  imageId: string;
+  imageId?: string;
+  propertyId?: string;
 };
 
 @Injectable()

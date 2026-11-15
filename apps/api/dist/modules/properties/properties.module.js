@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const auth_module_1 = require("../auth/auth.module");
 const availability_core_module_1 = require("../availability/availability-core.module");
 const host_images_service_1 = require("./host/host-images.service");
+const archived_images_service_1 = require("./images/archived-images.service");
 const image_variants_service_1 = require("./images/image-variants.service");
 const image_variants_worker_1 = require("./images/image-variants.worker");
 const host_properties_controller_1 = require("./host/host-properties.controller");
@@ -29,6 +30,7 @@ exports.PropertiesModule = PropertiesModule = __decorate([
             host_properties_service_1.HostPropertiesService,
             host_images_service_1.HostImagesService,
             image_variants_service_1.ImageVariantsService,
+            archived_images_service_1.ArchivedImagesService,
             image_variants_worker_1.ImageVariantsWorker,
         ],
         exports: [properties_service_1.PropertiesService, host_properties_service_1.HostPropertiesService],

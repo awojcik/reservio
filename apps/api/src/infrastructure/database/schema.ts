@@ -202,6 +202,12 @@ export const properties = pgTable(
 
     /** Set once, on the first successful publish, so the slug can be frozen. */
     firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+    /**
+     * When the photos of an ARCHIVED Property were removed from storage. Null
+     * on every live Property, and on an archived one until the worker has
+     * finished — which is what the cleanup sweep looks for.
+     */
+    imagesCleanedAt: timestamp("images_cleaned_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

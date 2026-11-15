@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { DATABASE } from "../../../infrastructure/database/database.module";
 import type { Database } from "../../../infrastructure/database/connection";
-import { propertyImages } from "../../../infrastructure/database/schema";
+import { properties, propertyImages } from "../../../infrastructure/database/schema";
 import {
   IMAGE_VARIANTS_QUEUE,
   type ImageVariantsJob,
@@ -21,7 +21,7 @@ import { requestVariants } from "./pending-variants";
 
 export type GenerateOutcome =
   | { status: "generated"; variants: number }
-  | { status: "skipped"; reason: "missing" | "current" | "not_stored" }
+  | { status: "skipped"; reason: "missing" | "current" | "not_stored" | "archived" }
   | { status: "abandoned"; reason: "deleted_meanwhile" | "original_missing" };
 
 /**
@@ -53,14 +53,19 @@ export class ImageVariantsService {
         propertyId: propertyImages.propertyId,
         objectKey: propertyImages.objectKey,
         variantsVersion: propertyImages.variantsVersion,
+        propertyStatus: properties.status,
       })
       .from(propertyImages)
+      .innerJoin(properties, eq(properties.id, propertyImages.propertyId))
       .where(eq(propertyImages.id, imageId))
       .limit(1);
 
     if (!image) return { status: "skipped", reason: "missing" };
     // The seeded catalogue is plain remote URLs; there is no original to read.
     if (!image.objectKey) return { status: "skipped", reason: "not_stored" };
+    // A job queued before the archive must not bring back the files the
+    // archive cleanup removes.
+    if (image.propertyStatus === "ARCHIVED") return { status: "skipped", reason: "archived" };
     if ((image.variantsVersion ?? 0) >= VARIANTS_VERSION) {
       return { status: "skipped", reason: "current" };
     }

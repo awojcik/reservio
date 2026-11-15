@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { AvailabilityCoreModule } from "../availability/availability-core.module";
 import { HostImagesService } from "./host/host-images.service";
+import { ArchivedImagesService } from "./images/archived-images.service";
 import { ImageVariantsService } from "./images/image-variants.service";
 import { ImageVariantsWorker } from "./images/image-variants.worker";
 import { HostPropertiesController } from "./host/host-properties.controller";
@@ -23,6 +24,7 @@ import { PropertiesService } from "./properties.service";
     HostPropertiesService,
     HostImagesService,
     ImageVariantsService,
+    ArchivedImagesService,
     ImageVariantsWorker,
   ],
   // Availability and calendar endpoints hang off the same Property aggregate

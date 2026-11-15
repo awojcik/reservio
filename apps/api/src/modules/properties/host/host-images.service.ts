@@ -56,7 +56,7 @@ export class HostImagesService {
     propertyId: string,
     dto: CreateUploadUrlDto,
   ): Promise<UploadUrlDto> {
-    await this.hostProperties.findOwned(hostId, propertyId);
+    this.assertNotArchived(await this.hostProperties.findOwned(hostId, propertyId));
     await this.assertRoomForAnotherImage(propertyId);
 
     const extension = EXTENSIONS[dto.contentType];
@@ -77,7 +77,7 @@ export class HostImagesService {
     propertyId: string,
     dto: ConfirmImageDto,
   ): Promise<HostPropertyImageDto[]> {
-    await this.hostProperties.findOwned(hostId, propertyId);
+    this.assertNotArchived(await this.hostProperties.findOwned(hostId, propertyId));
     this.assertKeyBelongsToProperty(propertyId, dto.objectKey);
     await this.assertRoomForAnotherImage(propertyId);
 
@@ -295,6 +295,16 @@ export class HostImagesService {
         imageId,
         reason: (error as Error).message,
       });
+    }
+  }
+
+  /**
+   * An archived Property's photos are removed from storage, so a photo added
+   * afterwards would be a file nothing ever cleans up.
+   */
+  private assertNotArchived(property: { status: string }): void {
+    if (property.status === "ARCHIVED") {
+      throw new ConflictException("Do zarchiwizowanego obiektu nie można dodawać zdjęć.");
     }
   }
 

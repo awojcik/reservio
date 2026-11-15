@@ -53,7 +53,11 @@ export const JOB_REGISTRY: { queue: string; token: symbol; jobs: string[] }[] = 
       "financial-reconciliation",
     ],
   },
-  { queue: "property-image-variants", token: IMAGE_VARIANTS_QUEUE, jobs: ["generate"] },
+  {
+    queue: "property-image-variants",
+    token: IMAGE_VARIANTS_QUEUE,
+    jobs: ["generate", "cleanup-archived", "cleanup-sweep"],
+  },
 ];
 
 /** How many failed jobs to pull per queue. Enough to see a pattern, not a dump. */

@@ -22,6 +22,7 @@ const publish_readiness_1 = require("../../../domain/publish-readiness");
 const slug_1 = require("../../../domain/slug");
 const geocoding_provider_1 = require("../../geocoding/domain/geocoding-provider");
 const object_storage_1 = require("../../storage/object-storage");
+const archived_images_service_1 = require("../images/archived-images.service");
 const image_sources_1 = require("../images/image-sources");
 const PUBLISH_ERRORS = {
     TITLE: { field: "title", code: "TITLE_REQUIRED" },
@@ -39,10 +40,12 @@ const PUBLISH_ERRORS = {
 let HostPropertiesService = HostPropertiesService_1 = class HostPropertiesService {
     database;
     storage;
+    archivedImages;
     logger = new common_1.Logger(HostPropertiesService_1.name);
-    constructor(database, storage) {
+    constructor(database, storage, archivedImages) {
         this.database = database;
         this.storage = storage;
+        this.archivedImages = archivedImages;
     }
     async list(hostId) {
         const rows = await this.database.db
@@ -211,7 +214,17 @@ let HostPropertiesService = HostPropertiesService_1 = class HostPropertiesServic
     }
     async archive(hostId, id) {
         const current = await this.findOwned(hostId, id);
-        return this.transition(hostId, current, "ARCHIVED", "property.archived");
+        const detail = await this.transition(hostId, current, "ARCHIVED", "property.archived");
+        if (current.status !== "ARCHIVED") {
+            await this.archivedImages.requestCleanup(current.id).catch((error) => {
+                this.logger.warn({
+                    event: "property.archive.cleanup_enqueue_failed",
+                    propertyId: current.id,
+                    reason: error.message,
+                });
+            });
+        }
+        return detail;
     }
     async findOwned(hostId, id) {
         const [row] = await this.database.db
@@ -352,6 +365,6 @@ exports.HostPropertiesService = HostPropertiesService = HostPropertiesService_1 
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(database_module_1.DATABASE)),
     __param(1, (0, common_1.Inject)(object_storage_1.OBJECT_STORAGE)),
-    __metadata("design:paramtypes", [Object, Object])
+    __metadata("design:paramtypes", [Object, Object, archived_images_service_1.ArchivedImagesService])
 ], HostPropertiesService);
 //# sourceMappingURL=host-properties.service.js.map

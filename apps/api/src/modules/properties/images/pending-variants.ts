@@ -8,9 +8,17 @@ import { VARIANTS_VERSION } from "./image-variants";
 
 export const GENERATE_JOB = "generate";
 
-/** One job per photo and version, so a second request for the same work is a no-op. */
+/**
+ * One job per photo and version, so a second request for the same work is a
+ * no-op.
+ *
+ * Dashes, not colons: BullMQ refuses a custom id containing `:` — except one
+ * with exactly three parts, which it reads as a legacy repeatable-job id. An
+ * id that only works because of that exception breaks the day it gains a
+ * fourth part.
+ */
 export function variantsJobId(imageId: string): string {
-  return `variants:${imageId}:v${VARIANTS_VERSION}`;
+  return `variants-${imageId}-v${VARIANTS_VERSION}`;
 }
 
 /**
@@ -21,15 +29,24 @@ export function variantsJobId(imageId: string): string {
  * backfill is for, and BullMQ would otherwise keep answering "already have
  * that id" forever.
  */
-export async function requestVariants(
+export function requestVariants(
   queue: Queue<ImageVariantsJob>,
   imageId: string,
 ): Promise<"queued" | "retried" | "exists"> {
-  const jobId = variantsJobId(imageId);
+  return addOrRetry(queue, GENERATE_JOB, { imageId }, variantsJobId(imageId));
+}
+
+/** The same rule for any job with a deterministic id. */
+export async function addOrRetry(
+  queue: Queue<ImageVariantsJob>,
+  name: string,
+  data: ImageVariantsJob,
+  jobId: string,
+): Promise<"queued" | "retried" | "exists"> {
   const existing = await queue.getJob(jobId);
 
   if (!existing) {
-    await queue.add(GENERATE_JOB, { imageId }, { jobId });
+    await queue.add(name, data, { jobId });
     return "queued";
   }
   if (await existing.isFailed()) {

@@ -84,6 +84,7 @@ exports.properties = (0, pg_core_1.pgTable)("properties", {
     marketDailyRateAmountMinor: (0, pg_core_1.integer)("market_daily_rate_amount_minor"),
     currency: (0, pg_core_1.text)("currency").notNull().default("PLN"),
     firstPublishedAt: (0, pg_core_1.timestamp)("first_published_at", { withTimezone: true }),
+    imagesCleanedAt: (0, pg_core_1.timestamp)("images_cleaned_at", { withTimezone: true }),
     createdAt: (0, pg_core_1.timestamp)("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: (0, pg_core_1.timestamp)("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

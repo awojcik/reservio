@@ -43,7 +43,7 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
         this.variants = variants;
     }
     async createUploadUrl(hostId, propertyId, dto) {
-        await this.hostProperties.findOwned(hostId, propertyId);
+        this.assertNotArchived(await this.hostProperties.findOwned(hostId, propertyId));
         await this.assertRoomForAnotherImage(propertyId);
         const extension = EXTENSIONS[dto.contentType];
         const objectKey = `properties/${propertyId}/${(0, node_crypto_1.randomUUID)()}.${extension}`;
@@ -55,7 +55,7 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
         return upload;
     }
     async confirm(hostId, propertyId, dto) {
-        await this.hostProperties.findOwned(hostId, propertyId);
+        this.assertNotArchived(await this.hostProperties.findOwned(hostId, propertyId));
         this.assertKeyBelongsToProperty(propertyId, dto.objectKey);
         await this.assertRoomForAnotherImage(propertyId);
         const existing = await this.database.db
@@ -208,6 +208,11 @@ let HostImagesService = HostImagesService_1 = class HostImagesService {
                 imageId,
                 reason: error.message,
             });
+        }
+    }
+    assertNotArchived(property) {
+        if (property.status === "ARCHIVED") {
+            throw new common_1.ConflictException("Do zarchiwizowanego obiektu nie można dodawać zdjęć.");
         }
     }
     assertKeyBelongsToProperty(propertyId, objectKey) {
