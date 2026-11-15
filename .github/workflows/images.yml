@@ -73,6 +73,33 @@ jobs:
           namespace="$(echo '${{ github.repository_owner }}/rezervio' | tr '[:upper:]' '[:lower:]')"
           echo "ref=ghcr.io/${namespace}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
+      # The web bundle bakes these in at build time. An empty one does not
+      # fail the build — it produces an image whose payment form can never
+      # load, which is exactly how production first shipped. Repository
+      # *variables*, not secrets: `vars.` reads nothing from the Secrets tab.
+      - name: Check web build configuration
+        if: matrix.image == 'web'
+        env:
+          PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
+          STORAGE_URL: ${{ vars.S3_PUBLIC_BASE_URL }}
+        run: |
+          case "$PUBLISHABLE_KEY" in
+            pk_test_*) ;;
+            pk_live_*)
+              echo "::error::NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is a live key. Rezervio runs on the Stripe sandbox only."
+              exit 1 ;;
+            "")
+              echo "::error::Repository variable NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set (Settings → Secrets and variables → Actions → Variables)."
+              exit 1 ;;
+            *)
+              echo "::error::NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY does not look like a Stripe publishable key."
+              exit 1 ;;
+          esac
+          if [ -z "$STORAGE_URL" ]; then
+            echo "::error::Repository variable S3_PUBLIC_BASE_URL is not set."
+            exit 1
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
