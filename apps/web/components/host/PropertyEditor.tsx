@@ -3,7 +3,7 @@
 import { CalendarDays, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ApiError,
@@ -22,6 +22,7 @@ import { Button, buttonStyles } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { useToast } from "@/components/ui/Toast";
 import { apiClient } from "@/lib/api";
+import { AFTER_ARCHIVE_HREF, saveState, type SaveState } from "@/lib/property-editor";
 import { AMENITY_LABELS } from "@/lib/format";
 import {
   COUNTRY_OPTIONS,
@@ -103,8 +104,19 @@ export function PropertyEditor({
   const [savedForm, setSavedForm] = useState<FormState>(() => toForm(initial));
   const [images, setImages] = useState<HostPropertyImage[]>(initial.images);
   const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [savedRecently, setSavedRecently] = useState(false);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(savedForm);
+  const state = saveState({ dirty, saving, failed, savedRecently });
+
+  // "Zapisano" is a confirmation, not a status: it fades after a moment, and
+  // the first edit replaces it with "Niezapisane zmiany" at once.
+  useEffect(() => {
+    if (!savedRecently) return;
+    const timer = window.setTimeout(() => setSavedRecently(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [savedRecently]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -171,8 +183,12 @@ export function PropertyEditor({
       setForm(toForm(saved));
       setSavedForm(toForm(saved));
       setImages(saved.images);
+      setFailed(false);
+      setSavedRecently(true);
       router.refresh();
     } catch (error) {
+      // The form keeps every edit; only the confirmation is withheld.
+      setFailed(true);
       showToast(
         error instanceof ApiError && error.status === 400
           ? "Sprawdź poprawność pól — nie udało się zapisać."
@@ -189,11 +205,14 @@ export function PropertyEditor({
   async function saveFromButton() {
     try {
       await save();
-      showToast("Zapisano zmiany.");
     } catch {
-      // Already reported by save().
+      // Already reported by save(), and shown next to the button.
     }
   }
+
+  const saveButton = (
+    <SaveButton state={state} onSave={saveFromButton} />
+  );
 
   // Images change the readiness the moment they are added or removed, so the
   // panel recomputes locally rather than waiting for the next save.
@@ -235,9 +254,7 @@ export function PropertyEditor({
             <ExternalLink size={16} strokeWidth={2.3} />
             Podgląd
           </Link>
-          <Button size="md" onClick={saveFromButton} disabled={saving}>
-            {saving ? "Zapisuję…" : dirty ? "Zapisz zmiany" : "Zapisano"}
-          </Button>
+          {saveButton}
         </div>
       </div>
 
@@ -554,11 +571,20 @@ export function PropertyEditor({
             ) : null}
 
             <div className="mt-4 border-t border-line pt-4">
+              {/*
+                Save first, then the lifecycle command, then — apart, below a
+                rule — archive. Publishing saves unsaved edits on its own, but
+                it is not a substitute for saving.
+              */}
               <PropertyActions
                 propertyId={property.id}
                 status={property.status}
                 size="md"
-                onBeforeAction={save}
+                leading={saveButton}
+                save={save}
+                unsavedChanges={dirty}
+                afterArchiveHref={AFTER_ARCHIVE_HREF}
+                archivePlacement="separate"
               />
             </div>
           </div>
@@ -730,6 +756,33 @@ function GeocodeStatus({
         <p className="text-[13px]">
           {state.message} Możesz wskazać punkt na mapie ręcznie.
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One save control, used in the header and next to publish. Disabled when
+ * there is nothing to save, with the state spelled out beside it — saving is
+ * manual, and the Host should never have to guess whether it happened.
+ */
+function SaveButton({ state, onSave }: { state: SaveState; onSave: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Button size="md" onClick={onSave} disabled={state.disabled}>
+        {state.label}
+      </Button>
+      {state.message ? (
+        <span
+          role="status"
+          className={
+            state.status === "error"
+              ? "text-[13px] font-semibold text-ink"
+              : "text-[13px] font-semibold text-muted"
+          }
+        >
+          {state.message}
+        </span>
       ) : null}
     </div>
   );
