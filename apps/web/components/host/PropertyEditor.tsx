@@ -563,7 +563,6 @@ export function PropertyEditor({
             ) : null}
 
             <div className="mt-4 border-t border-line pt-4">
-              {/* The lifecycle command, then — apart, below a rule — archive. */}
               <PropertyActions
                 propertyId={property.id}
                 status={property.status}
@@ -571,7 +570,6 @@ export function PropertyEditor({
                 save={save}
                 unsavedChanges={dirty}
                 afterArchiveHref={AFTER_ARCHIVE_HREF}
-                archivePlacement="separate"
               />
             </div>
           </div>

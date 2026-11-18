@@ -31,12 +31,6 @@ type PropertyActionsProps = {
    * has nothing left to edit; the list stays and refreshes.
    */
   afterArchiveHref?: string;
-  /**
-   * `inline` puts archive in the same row (the list); `separate` puts it
-   * below a rule, as a secondary action away from save and publish (the
-   * editor).
-   */
-  archivePlacement?: "inline" | "separate";
 };
 
 export function PropertyActions({
@@ -46,7 +40,6 @@ export function PropertyActions({
   save,
   unsavedChanges = false,
   afterArchiveHref,
-  archivePlacement = "inline",
 }: PropertyActionsProps) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -89,17 +82,6 @@ export function PropertyActions({
     }
   }
 
-  const archiveButton = canArchive(status) ? (
-    <Button
-      size={size}
-      variant="ghost"
-      disabled={pending !== null}
-      onClick={() => setConfirming(true)}
-    >
-      {archivePlacement === "separate" ? "Archiwizuj ofertę" : "Archiwizuj"}
-    </Button>
-  ) : null;
-
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -137,12 +119,17 @@ export function PropertyActions({
           </Button>
         ) : null}
 
-        {archivePlacement === "inline" ? archiveButton : null}
+        {canArchive(status) ? (
+          <Button
+            size={size}
+            variant="ghost"
+            disabled={pending !== null}
+            onClick={() => setConfirming(true)}
+          >
+            Archiwizuj
+          </Button>
+        ) : null}
       </div>
-
-      {archivePlacement === "separate" && archiveButton ? (
-        <div className="mt-4 border-t border-line pt-3">{archiveButton}</div>
-      ) : null}
 
       <Dialog open={confirming} onOpenChange={(open) => pending === null && setConfirming(open)}>
         <DialogContent title="Zarchiwizować ofertę?" aria-describedby={undefined}>
