@@ -1,61 +1,7 @@
 /**
- * The Property editor's save and lifecycle rules, as plain functions.
- *
- * Saving is manual: nothing is written until the Host presses "Zapisz
- * zmiany". These rules are what make that visible — the button is only live
- * when there is something to save, and the state next to it always says
- * which of the four situations the form is in. Kept out of the component so
- * they can be pinned down without a renderer.
+ * The Property editor's lifecycle rules, as plain functions — kept out of the
+ * component so they can be pinned down without a renderer.
  */
-
-export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
-
-export type SaveState = {
-  status: SaveStatus;
-  /** The button's label. */
-  label: string;
-  disabled: boolean;
-  /** The quiet line next to the button, or null when there is nothing to say. */
-  message: string | null;
-};
-
-export function saveState({
-  dirty,
-  saving,
-  failed,
-  savedRecently,
-}: {
-  dirty: boolean;
-  saving: boolean;
-  /** The last save failed and nothing has been saved since. */
-  failed: boolean;
-  /** A save succeeded a moment ago — long enough to be noticed, not longer. */
-  savedRecently: boolean;
-}): SaveState {
-  if (saving) {
-    return { status: "saving", label: "Zapisywanie…", disabled: true, message: null };
-  }
-  if (failed && dirty) {
-    return {
-      status: "error",
-      label: "Zapisz zmiany",
-      disabled: false,
-      message: "Nie udało się zapisać — zmiany są nadal w formularzu.",
-    };
-  }
-  if (dirty) {
-    return {
-      status: "dirty",
-      label: "Zapisz zmiany",
-      disabled: false,
-      message: "Niezapisane zmiany",
-    };
-  }
-  if (savedRecently) {
-    return { status: "saved", label: "Zapisz zmiany", disabled: true, message: "Zapisano" };
-  }
-  return { status: "idle", label: "Zapisz zmiany", disabled: true, message: null };
-}
 
 /**
  * Publish and unpublish act on what is in the database, so unsaved edits are

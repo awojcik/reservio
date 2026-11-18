@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import { ApiError, type PropertyNotReady, type PropertyStatus } from "@rezervio/api-client";
 
@@ -24,8 +24,6 @@ type PropertyActionsProps = {
    * Listing (`runLifecycle`). Archive never runs it: see `archiveFlow`.
    */
   save?: () => Promise<void>;
-  /** Shown first, before the lifecycle commands — the editor's save button. */
-  leading?: ReactNode;
   /** The editor has edits not yet saved: publish saves them, archive warns. */
   unsavedChanges?: boolean;
   /**
@@ -46,7 +44,6 @@ export function PropertyActions({
   status,
   size = "sm",
   save,
-  leading,
   unsavedChanges = false,
   afterArchiveHref,
   archivePlacement = "inline",
@@ -106,8 +103,6 @@ export function PropertyActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {leading}
-
         {canPublish(status) ? (
           <Button
             size={size}
